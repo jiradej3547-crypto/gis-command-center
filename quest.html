@@ -7,7 +7,6 @@
     body { margin: 0; overflow: hidden; background-color: #020509; font-family: 'Segoe UI', Tahoma, sans-serif; }
     #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
     
-    /* กล่องกล้องสแกนมือโฮโลแกรม (ทรงสี่เหลี่ยมผืนผ้า Sci-Fi) */
     #camera-preview {
       position: absolute; bottom: 25px; right: 25px;
       width: 200px; height: 130px;
@@ -20,21 +19,13 @@
     #output-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
     #hud {
-      position: absolute; top: 25px; left: 25px; color: #00ffcc;
-      font-size: 15px; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+      position: absolute; top: 25px; left: 25px;
       pointer-events: none; z-index: 10; font-family: monospace;
     }
 
-    #layer-indicator {
-      position: absolute; top: 95px; left: 25px;
-      background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc;
-      color: #ffcc00; padding: 6px 12px; border-radius: 4px; font-size: 12px;
-      font-family: monospace; z-index: 10;
-    }
-
     #quest-card {
-      position: absolute; top: 25px; right: 25px; width: 360px;
-      background: rgba(4, 16, 30, 0.92); border: 1px solid rgba(0, 255, 204, 0.6);
+      position: absolute; top: 25px; right: 25px; width: 380px;
+      background: rgba(4, 16, 30, 0.95); border: 1px solid rgba(0, 255, 204, 0.6);
       backdrop-filter: blur(10px); border-radius: 10px; padding: 16px; color: #fff;
       box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 204, 0.3);
       display: none; z-index: 10; font-family: monospace;
@@ -43,6 +34,16 @@
     #quest-card p { margin: 4px 0; font-size: 13px; color: #b3f0ff; }
     .badge { display: inline-block; padding: 2px 8px; background: rgba(255, 51, 102, 0.2); border: 1px solid #ff3366; color: #ff3366; font-weight: bold; font-size: 11px; border-radius: 3px; margin-bottom: 6px; }
     
+    /* Quiz Options */
+    .quiz-option {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(0, 255, 204, 0.3);
+      border-radius: 6px; padding: 8px 12px; margin: 6px 0; font-size: 12px; color: #e6ffff;
+      transition: all 0.2s;
+    }
+    .quiz-option.selected { border-color: #ffcc00; background: rgba(255, 204, 0, 0.25); box-shadow: 0 0 10px #ffcc00; font-weight: bold; }
+    .quiz-option.correct { border-color: #00ffcc; background: rgba(0, 255, 204, 0.3); color: #00ffcc; }
+
+    /* Combo Boxes */
     .combo-container { display: flex; justify-content: space-between; margin-top: 12px; gap: 8px; }
     .combo-box {
       flex: 1; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(0, 255, 204, 0.3);
@@ -51,9 +52,18 @@
     .combo-box.active { border-color: #ffcc00; background: rgba(255, 204, 0, 0.2); box-shadow: 0 0 10px #ffcc00; }
     .combo-box.done { border-color: #00ffcc; background: rgba(0, 255, 204, 0.25); box-shadow: 0 0 10px #00ffcc; }
 
+    /* Balance Gauge Bar */
+    .gauge-container { position: relative; width: 100%; height: 26px; background: rgba(255, 255, 255, 0.1); border-radius: 13px; margin: 12px 0; overflow: hidden; border: 1px solid rgba(0, 255, 204, 0.5); }
+    .gauge-safe-zone { position: absolute; height: 100%; background: rgba(255, 204, 0, 0.4); border: 1px solid #ffcc00; box-shadow: 0 0 10px #ffcc00; }
+    .gauge-hand-pointer { position: absolute; height: 100%; width: 16px; background: #00ffcc; border-radius: 8px; box-shadow: 0 0 12px #00ffcc; transition: left 0.05s linear; }
+
+    /* Time-Bomb Bar for Memory Quest */
+    .time-bomb-container { position: relative; width: 100%; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; margin-top: 8px; overflow: hidden; border: 1px solid rgba(255, 51, 102, 0.4); }
+    .time-bomb-bar { position: absolute; height: 100%; width: 100%; background: #ff3366; box-shadow: 0 0 10px #ff3366; transition: width 0.1s linear; }
+
     .action-instruction {
       margin-top: 12px; padding: 8px; background: rgba(0, 255, 204, 0.1);
-      border-left: 3px solid #00ffcc; font-weight: bold; color: #e6ffff; font-size: 13px; text-align: center;
+      border-left: 3px solid #00ffcc; font-weight: bold; color: #e6ffff; font-size: 12px; text-align: center;
     }
 
     .nav-btn {
@@ -63,6 +73,8 @@
       box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
     }
     .nav-btn:hover { background: rgba(0, 255, 204, 0.3); box-shadow: 0 0 15px #00ffcc; }
+    .restart-btn { background: rgba(255, 204, 0, 0.15); border-color: #ffcc00; color: #ffcc00; }
+    .restart-btn:hover { background: rgba(255, 204, 0, 0.35); box-shadow: 0 0 15px #ffcc00; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -72,20 +84,14 @@
 <body>
 
   <div id="hud">
-    <h2 style="margin: 0 0 5px 0; font-size: 20px;">🛰️ ศูนย์ปฏิบัติการภูมิสารสนเทศกู้ภัยโลก</h2>
-    <p id="status" style="margin: 3px 0;">สถานะ: ชูมือขึ้นมาเพื่อเริ่มสำรวจโลก</p>
-    <p id="score-text" style="color: #ffcc00; font-weight: bold; font-size: 15px; margin: 5px 0;">สยบภัยพิบัติแล้ว: 0 / 5 พื้นที่</p>
+    <p id="score-text" style="color: #ffcc00; font-weight: bold; font-size: 22px; margin: 0; text-shadow: 0 0 10px rgba(255, 204, 0, 0.6);">สยบภัยพิบัติแล้ว: 0 / 5 พื้นที่</p>
   </div>
 
-  <div id="layer-indicator">
-    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว เพื่อสลับสกินโลก)
-  </div>
-
-  <!-- แถบปุ่มสลับหน้าไป 3D Globe, 2D Map และ Quest -->
   <div style="position: absolute; bottom: 20px; left: 25px; z-index: 100; display: flex; gap: 10px;">
     <button class="nav-btn" onclick="window.location.href='index.html'">🌐 3D GLOBE</button>
     <button class="nav-btn" onclick="window.location.href='map.html'">🗺️ 2D MAP</button>
     <button class="nav-btn" style="background: rgba(0, 255, 204, 0.25); border-color: #00ffcc;">🎮 QUEST</button>
+    <button class="nav-btn restart-btn" onclick="initQuestGame()">🎲 สุ่มเควสใหม่</button>
   </div>
 
   <div id="quest-card">
@@ -93,10 +99,51 @@
     <h3 id="disaster-name">เตือนภัยพิบัติ</h3>
     <p id="disaster-coords">พิกัด: -</p>
     
-    <div class="combo-container">
+    <!-- 1. โหมดเป่ายิงฉุบสายฟ้าแลบ (ROSHAMBO) -->
+    <div id="roshambo-zone" style="display: none; text-align: center; margin-top: 10px;">
+      <p id="roshambo-status-title" style="font-size: 13px; color: #ffcc00; margin-bottom: 5px;">⚠️ เตรียมตัวเป่ายิงฉุบ!</p>
+      <div id="boss-hand" style="font-size: 42px; margin: 5px 0;">⏳ 3</div>
+      <p id="roshambo-timer-bar" style="font-size: 11px; color: #ff3366; font-weight: bold; margin-top: 3px;">เวลาตอบ: 1.0s</p>
+    </div>
+
+    <!-- 2. โหมดคำถาม (QUIZ) -->
+    <div id="quiz-zone" style="display: none; margin-top: 10px;">
+      <p id="quiz-question" style="color: #ffcc00; font-weight: bold; margin-bottom: 8px;">คำถาม: ?</p>
+      <div id="opt-1" class="quiz-option">☝️ ชู 1 นิ้ว : A. ตัวเลือก 1</div>
+      <div id="opt-2" class="quiz-option">✌️ ชู 2 นิ้ว : B. ตัวเลือก 2</div>
+      <div id="opt-3" class="quiz-option">🤟 ชู 3 นิ้ว : C. ตัวเลือก 3</div>
+    </div>
+
+    <!-- 3. โหมดทรงตัวแถบเคลื่อนที่เร็วขึ้น (BALANCE TILT) -->
+    <div id="balance-zone" style="display: none; margin-top: 10px;">
+      <p style="color: #ffcc00; font-size: 12px; margin-bottom: 4px;">⚖️ ประคองบาลานซ์มือตามแถบสีเหลืองที่เคลื่อนที่เร็ว:</p>
+      <div class="gauge-container">
+        <div id="gauge-target" class="gauge-safe-zone" style="left: 40%; width: 22%;"></div>
+        <div id="gauge-pointer" class="gauge-hand-pointer" style="left: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- 4. โหมดคาถาคอมโบ (COMBO) -->
+    <div id="combo-zone" class="combo-container" style="display: none;">
       <div id="step-0" class="combo-box">❓</div>
       <div id="step-1" class="combo-box">❓</div>
       <div id="step-2" class="combo-box">❓</div>
+    </div>
+
+    <!-- 5. โหมดความจำระเบิดเวลา 15 วิ (MEMORY PATTERN) -->
+    <div id="memory-zone" style="display: none; margin-top: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <p id="memory-instruction" style="font-size: 12px; color: #ffcc00; margin: 0;">🧠 จำลำดับท่าทาง 3 วินาที!</p>
+        <span id="memory-timer-text" style="font-size: 12px; color: #ff3366; font-weight: bold;">💣 15.0s</span>
+      </div>
+      <div class="combo-container">
+        <div id="mem-step-0" class="combo-box">❓</div>
+        <div id="mem-step-1" class="combo-box">❓</div>
+        <div id="mem-step-2" class="combo-box">❓</div>
+      </div>
+      <div class="time-bomb-container">
+        <div id="time-bomb-bar" class="time-bomb-bar"></div>
+      </div>
     </div>
 
     <div id="action-box" class="action-instruction">👉 ปลดรหัสคาถากู้ภัยตามลำดับ!</div>
@@ -131,26 +178,20 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
-    // 🌌 Dynamic Starfield Background
     const starsGeo = new THREE.BufferGeometry();
     const starsCount = 2000;
     const starPositions = new Float32Array(starsCount * 3);
-    for(let i=0; i<starsCount*3; i++) {
-      starPositions[i] = (Math.random() - 0.5) * 120;
-    }
+    for(let i=0; i<starsCount*3; i++) starPositions[i] = (Math.random() - 0.5) * 120;
     starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starsMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 });
-    const starField = new THREE.Points(starsGeo, starsMat);
+    const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 }));
     scene.add(starField);
 
-    // 🌍 ลูกโลก 3D & สกินทั้ง 3 โหมด
     const globeRadius = 2;
     const geometry = new THREE.SphereGeometry(globeRadius, 128, 128);
     const textureLoader = new THREE.TextureLoader();
 
     const texDay = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
     const texNight = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg');
-    const texTopo = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
     const bumpTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
 
     const material = new THREE.MeshPhongMaterial({ map: texDay, bumpMap: bumpTexture, bumpScale: 0.04, roughness: 0.7, shininess: 15 });
@@ -158,8 +199,7 @@
     scene.add(globe);
 
     const atmosGeo = new THREE.SphereGeometry(globeRadius + 0.08, 64, 64);
-    const atmosMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.12, side: THREE.BackSide });
-    scene.add(new THREE.Mesh(atmosGeo, atmosMat));
+    scene.add(new THREE.Mesh(atmosGeo, new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.12, side: THREE.BackSide })));
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -167,15 +207,21 @@
     scene.add(dirLight);
     camera.position.z = 4.5;
 
-    const disasterPresets = [
-      { name: "พายุไต้ฝุ่นแปซิฟิก", lat: 15, lon: 120 },
-      { name: "รอยเลื่อนซานแอนเดรียส", lat: 36, lon: -120 },
-      { name: "ภูเขาไฟปะทุแอนดีส", lat: -23, lon: -68 },
-      { name: "คลื่นความร้อนซาฮารา", lat: 20, lon: 10 },
-      { name: "รอยเลื่อนพิบัติอัลไพน์", lat: -43, lon: 170 }
+    // 🌟 10 ภัยพิบัติ 5 รูปแบบเควส
+    const masterDisasterPool = [
+      { id: 1, gameMode: "ROSHAMBO", name: "🌀 พายุไต้ฝุ่นแปซิฟิก", lat: 15, lon: 120 },
+      { id: 2, gameMode: "QUIZ", name: "🌋 ภูเขาไฟปะทุแอนดีส", lat: -23, lon: -68, quiz: { q: "หินหลอมเหลวที่ปะทุออกมาบนพื้นผิวโลกเรียกว่า?", a1: "ลาวา", a2: "แมกมา", a3: "หินอัคนี", ans: 1 } },
+      { id: 3, gameMode: "BALANCE", name: "💥 รอยเลื่อนซานแอนเดรียส", lat: 36, lon: -120 },
+      { id: 4, gameMode: "COMBO", name: "☀️ คลื่นความร้อนซาฮารา", lat: 20, lon: 10 },
+      { id: 5, gameMode: "MEMORY", name: "🌊 สึนามิรอยเลื่อนสุมาตรา", lat: 3, lon: 95 },
+      { id: 6, gameMode: "ROSHAMBO", name: "❄️ พายุหิมะอาร์กติก", lat: 75, lon: -40 },
+      { id: 7, gameMode: "QUIZ", name: "🪐 อุกกาบาตตกไซบีเรีย", lat: 60, lon: 100, quiz: { q: "เครื่องมือใช้สำหรับส่องดูดาวในอวกาศคือ?", a1: "กล้องโทรทรรศน์", a2: "กล้องจุลทรรศน์", a3: "แว่นขยาย", ans: 1 } },
+      { id: 8, gameMode: "BALANCE", name: "🔥 ไฟป่าอะเมซอน", lat: -3, lon: -60 },
+      { id: 9, gameMode: "COMBO", name: "⚡ พายุสุริยะขั้วโลก", lat: -65, lon: 140 },
+      { id: 10, gameMode: "MEMORY", name: "🏜️ ภัยแล้งที่ราบสูงเดกกัน", lat: 18, lon: 78 }
     ];
 
-    const markers = [];
+    let activeMarkers = [];
     let clearedCount = 0;
 
     function latLonToVector3(lat, lon, radius) {
@@ -184,46 +230,88 @@
       return new THREE.Vector3(-(radius * Math.sin(phi) * Math.cos(theta)), (radius * Math.cos(phi)), (radius * Math.sin(phi) * Math.sin(theta)));
     }
 
-    disasterPresets.forEach(data => {
-      const pos = latLonToVector3(data.lat, data.lon, globeRadius + 0.025);
-      const markerMesh = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff3366 }));
-      markerMesh.position.copy(pos);
+    function initQuestGame() {
+      activeMarkers.forEach(m => globe.remove(m));
+      activeMarkers = [];
+      clearedCount = 0;
+      questState = "NONE";
+      currentLockedMarker = null;
+      if (roshamboTimer) clearInterval(roshamboTimer);
+      if (memoryTimer) clearInterval(memoryTimer);
+      if (bombTimer) clearInterval(bombTimer);
       
-      const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.09, 32), new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
-      ringMesh.lookAt(pos.clone().multiplyScalar(2));
-      markerMesh.add(ringMesh);
+      document.getElementById('quest-card').style.display = 'none';
+      document.getElementById('score-text').innerText = `สยบภัยพิบัติแล้ว: 0 / 5 พื้นที่`;
 
-      markerMesh.userData = { ...data, cleared: false, ring: ringMesh };
-      globe.add(markerMesh);
-      markers.push(markerMesh);
-    });
+      const modes = ["ROSHAMBO", "QUIZ", "BALANCE", "COMBO", "MEMORY"];
+      const selectedQuests = [];
+
+      modes.forEach(m => {
+        const pool = masterDisasterPool.filter(d => d.gameMode === m);
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        selectedQuests.push(picked);
+      });
+
+      selectedQuests.forEach(data => {
+        const pos = latLonToVector3(data.lat, data.lon, globeRadius + 0.025);
+        const markerMesh = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff3366 }));
+        markerMesh.position.copy(pos);
+        
+        const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.09, 32), new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
+        ringMesh.lookAt(pos.clone().multiplyScalar(2));
+        markerMesh.add(ringMesh);
+
+        markerMesh.userData = { ...data, cleared: false, ring: ringMesh };
+        globe.add(markerMesh);
+        activeMarkers.push(markerMesh);
+      });
+
+      playBeep(880, 'square', 0.2);
+    }
 
     const gestureList = [
-      { id: "OK", emoji: "👌", name: "ทำมือ OK" },
+      { id: "POINT_UP", emoji: "☝️", name: "ชี้ขึ้นฟ้า" },
       { id: "PALM", emoji: "✋", name: "แบมือ 5 นิ้ว" },
       { id: "PEACE", emoji: "✌️", name: "ชู 2 นิ้ว" },
-      { id: "POINT_UP", emoji: "☝️", name: "ชี้ขึ้นฟ้า" },
-      { id: "LOVE", emoji: "🤟", name: "ชูไอเลิฟยู" }
+      { id: "LOVE", emoji: "🤟", name: "ชูไอเลิฟยู" },
+      { id: "FIST", emoji: "✊", name: "กำหมัด" }
     ];
 
-    let lastHandX = null, lastHandY = null, initialHandDistance = null;
+    let lastHandX = null, lastHandY = null, initialHandDistance = null, initialPinchDistance = null;
     let currentLockedMarker = null;
     let questState = "NONE"; 
     let currentCombo = [];
+    let memoryCombo = [];
     let currentStep = 0;
     let holdTimer = 0;
-    let currentLayerMode = 1;
+    let isNightMode = false;
 
-    // รหัสลับสลับกลับหน้า index.html
-    let secretToggleCount = 0;
-    let lastSecretGesture = "NONE";
-    let secretPhase = "TOGGLE";
-    let secretTimer = null;
+    // เควส Roshambo
+    let roshamboPhase = "COUNTDOWN";
+    let roshamboBossHand = { id: "FIST", emoji: "✊ (ค้อน)", win: "PALM" };
+    let roshamboTimer = null;
+    let roshamboTimeLeft = 1.0;
+
+    // เควส Balance (เพิ่มความเร็วสไลด์เป็น 0.85)
+    let balanceTargetLeft = 40, balanceTargetWidth = 22, balanceDirection = 1;
+
+    // เควส Memory + ระเบิดเวลา 15 วิ
+    let memoryPhase = "SHOW"; 
+    let memoryTimer = null;
+    let bombTimer = null;
+    let bombTimeLeft = 15.0;
+
+    let secretToggleCount = 0, lastSecretGesture = "NONE", secretPhase = "TOGGLE", secretTimer = null;
+    let holdPeaceFrames = 0;
+    const HOLD_REQUIRED_FRAMES = 20;
 
     const questCard = document.getElementById('quest-card');
+    const roshamboZone = document.getElementById('roshambo-zone');
+    const quizZone = document.getElementById('quiz-zone');
+    const balanceZone = document.getElementById('balance-zone');
+    const comboZone = document.getElementById('combo-zone');
+    const memoryZone = document.getElementById('memory-zone');
     const actionBox = document.getElementById('action-box');
-    const statusText = document.getElementById('status');
-    const layerIndicator = document.getElementById('layer-indicator');
 
     function detectGesture(landmarks) {
       const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
@@ -241,27 +329,15 @@
       const isOpenPalm = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y < landmarks[14].y && landmarks[20].y < landmarks[18].y;
       if (isOpenPalm) return "PALM";
 
-      const isOk = Math.hypot(landmarks[4].x - landmarks[8].x, landmarks[4].y - landmarks[8].y) < 0.05;
-      if (isOk) return "OK";
-
       return "UNKNOWN";
     }
 
-    function switchSatelliteLayer(mode) {
-      if (currentLayerMode === mode) return;
-      currentLayerMode = mode;
-      playBeep(900, 'square', 0.15);
+    function toggleSatelliteLayer() {
+      isNightMode = !isNightMode;
+      playBeep(900, 'square', 0.2);
 
-      if (mode === 1) {
-        material.map = texDay;
-        layerIndicator.innerText = "MAP LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
-      } else if (mode === 2) {
-        material.map = texNight;
-        layerIndicator.innerText = "MAP LAYER: EARTH AT NIGHT (แสงไฟเมืองกลางคืน)";
-      } else if (mode === 3) {
-        material.map = texTopo;
-        layerIndicator.innerText = "MAP LAYER: TOPOGRAPHIC HEIGHT (ภูมิประเทศความสูง)";
-      }
+      if (isNightMode) material.map = texNight;
+      else material.map = texDay;
       material.needsUpdate = true;
     }
 
@@ -283,12 +359,126 @@
       }
     }
 
+    // เควส 1: เป่ายิงฉุบสายฟ้าแลบ (พร้อม Deadzone 0.3s)
+    function startRoshamboRound() {
+      roshamboPhase = "COUNTDOWN";
+      let count = 3;
+      document.getElementById('roshambo-status-title').innerText = "⚠️ เตรียมตัวเป่ายิงฉุบ!";
+      document.getElementById('boss-hand').innerText = `⏳ ${count}`;
+      document.getElementById('roshambo-timer-bar').innerText = "เตรียมออกท่าชนะบอส!";
+      actionBox.innerText = "👉 ค้อน ✊ ชนะ กรรไกร ✌️ | กรรไกร ✌️ ชนะ กระดาษ ✋ | กระดาษ ✋ ชนะ ค้อน ✊";
+
+      if (roshamboTimer) clearInterval(roshamboTimer);
+
+      roshamboTimer = setInterval(() => {
+        count--;
+        if (count > 0) {
+          document.getElementById('boss-hand').innerText = `⏳ ${count}`;
+          playBeep(400, 'sine', 0.05);
+        } else {
+          clearInterval(roshamboTimer);
+          const hands = [
+            { id: "FIST", emoji: "✊ (ค้อน)", win: "PALM", hint: "ออก กระดาษ ✋ ชนะ ค้อน ✊" },
+            { id: "PEACE", emoji: "✌️ (กรรไกร)", win: "FIST", hint: "ออก ค้อน ✊ ชนะ กรรไกร ✌️" },
+            { id: "PALM", emoji: "✋ (กระดาษ)", win: "PEACE", hint: "ออก กรรไกร ✌️ ชนะ กระดาษ ✋" }
+          ];
+          roshamboBossHand = hands[Math.floor(Math.random() * hands.length)];
+          roshamboPhase = "PLAY";
+          roshamboTimeLeft = 1.0;
+
+          document.getElementById('roshambo-status-title').innerText = "⚡ ล็อกท่าชนะบอสให้ทัน!";
+          document.getElementById('boss-hand').innerText = roshamboBossHand.emoji;
+          actionBox.innerText = `👉 ${roshamboBossHand.hint}`;
+          playBeep(880, 'square', 0.15);
+
+          roshamboTimer = setInterval(() => {
+            roshamboTimeLeft -= 0.1;
+            document.getElementById('roshambo-timer-bar').innerText = `เหลือเวลา: ${Math.max(0, roshamboTimeLeft).toFixed(1)}s`;
+
+            if (roshamboTimeLeft <= 0) {
+              clearInterval(roshamboTimer);
+              playBeep(200, 'sawtooth', 0.2);
+              actionBox.innerText = "❌ หมดเวลา! บอสสุ่มเปลี่ยนท่าใหม่...";
+              setTimeout(startRoshamboRound, 1000);
+            }
+          }, 100);
+        }
+      }, 700);
+    }
+
+    // เควส 5: ความจำพร้อมระเบิดเวลาปรับเพิ่มเป็น 15 วินาที
+    function startMemoryGame() {
+      if (bombTimer) clearInterval(bombTimer);
+      memoryPhase = "SHOW";
+      memoryCombo = generateRandomCombo();
+      currentStep = 0; holdTimer = 0;
+
+      document.getElementById('memory-instruction').innerText = "🧠 จำลำดับท่าทาง 3 วินาที!";
+      document.getElementById('memory-timer-text').innerText = "💣 15.0s";
+      document.getElementById('time-bomb-bar').style.width = "100%";
+      actionBox.innerText = "👉 กำลังแสดงรหัสผ่านวิกฤต...";
+
+      for (let i = 0; i < 3; i++) {
+        const box = document.getElementById(`mem-step-${i}`);
+        box.innerText = memoryCombo[i].emoji;
+        box.className = "combo-box active";
+      }
+
+      if (memoryTimer) clearTimeout(memoryTimer);
+      memoryTimer = setTimeout(() => {
+        memoryPhase = "GUESS";
+        document.getElementById('memory-instruction').innerText = "❓ รหัสซ่อนแล้ว! ทายให้ถูกก่อนหมดเวลา";
+        
+        for (let i = 0; i < 3; i++) {
+          const box = document.getElementById(`mem-step-${i}`);
+          box.innerText = "❓";
+          box.className = "combo-box";
+        }
+        updateMemoryUI();
+
+        // นับถอยหลังระเบิดเวลา 15.0 วินาที
+        bombTimeLeft = 15.0;
+        bombTimer = setInterval(() => {
+          bombTimeLeft -= 0.1;
+          const pct = Math.max(0, (bombTimeLeft / 15.0) * 100);
+          document.getElementById('time-bomb-bar').style.width = `${pct}%`;
+          document.getElementById('memory-timer-text').innerText = `💣 ${Math.max(0, bombTimeLeft).toFixed(1)}s`;
+
+          if (bombTimeLeft <= 0) {
+            clearInterval(bombTimer);
+            playBeep(200, 'sawtooth', 0.3);
+            actionBox.innerText = "💥 หมดเวลา 15 วินาที! สุ่มรหัสใหม่...";
+            setTimeout(startMemoryGame, 1000);
+          }
+        }, 100);
+
+      }, 3000);
+    }
+
+    function updateMemoryUI() {
+      for (let i = 0; i < 3; i++) {
+        const box = document.getElementById(`mem-step-${i}`);
+        box.className = "combo-box";
+        if (i < currentStep) {
+          box.innerText = memoryCombo[i].emoji;
+          box.classList.add("done");
+        } else if (i === currentStep) {
+          box.innerText = "❓";
+          box.classList.add("active");
+        } else {
+          box.innerText = "❓";
+        }
+      }
+      if (currentStep < 3) {
+        actionBox.innerText = `👉 ทายท่าที่ ${currentStep + 1}: ทำท่าปริศนาค้างไว้!`;
+      }
+    }
+
     function resetSecretCode() {
       secretToggleCount = 0; secretPhase = "TOGGLE"; lastSecretGesture = "NONE";
       if (secretTimer) clearTimeout(secretTimer);
     }
 
-    // 🖐️ วาดโครงกระดูกมือโฮโลแกรมดิจิทัล
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('output-canvas');
     const canvasCtx = canvasElement.getContext('2d');
@@ -355,53 +545,152 @@
         const currentY = landmarks[0].y;
         const detected = detectGesture(landmarks);
 
-        // สลับชั้นภาพดาวเทียมด้วย 1, 2, 3 นิ้ว
-        if (detected === "POINT_1") switchSatelliteLayer(1);
-        else if (detected === "PEACE_2") switchSatelliteLayer(2);
-        else if (detected === "LOVE_3") switchSatelliteLayer(3);
+        const thumbTip = landmarks[4];
+        const indexTip = landmarks[8];
+        const pinchDistance = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
 
-        // 🔐 รหัสลับสลับกลับหน้า index.html (กำ-แบ 5 ครั้ง + ท่า 🤟)
+        const isMiddleFolded = landmarks[12].y > landmarks[10].y;
+        const isRingFolded = landmarks[16].y > landmarks[14].y;
+        const isPinkyFolded = landmarks[20].y > landmarks[18].y;
+        const isPinchGesture = isMiddleFolded && isRingFolded && isPinkyFolded;
+
+        // สลับสกิน
+        if (detected === "PEACE_2" && questState === "NONE" && secretPhase !== "WAIT_LOVE") {
+          holdPeaceFrames++;
+          if (holdPeaceFrames >= HOLD_REQUIRED_FRAMES) {
+            toggleSatelliteLayer();
+            holdPeaceFrames = 0;
+          }
+        } else {
+          holdPeaceFrames = 0;
+        }
+
+        // Secret Code
         if (secretPhase === "TOGGLE") {
           if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
-            secretToggleCount++;
-            lastSecretGesture = detected;
+            secretToggleCount++; lastSecretGesture = detected;
             playBeep(400 + secretToggleCount * 100, 'sine', 0.05);
 
             if (secretTimer) clearTimeout(secretTimer);
             secretTimer = setTimeout(resetSecretCode, 3000);
 
-            if (secretToggleCount >= 10) { // กำ-แบ ครบ 5 รอบ
-              secretPhase = "WAIT_LOVE";
-              playBeep(880, 'triangle', 0.1);
+            if (secretToggleCount >= 10) {
+              secretPhase = "WAIT_LOVE"; playBeep(880, 'triangle', 0.1);
             }
           }
         } else if (secretPhase === "WAIT_LOVE") {
           if (detected === "LOVE_3") {
             playBeep(1200, 'square', 0.3);
             resetSecretCode();
-            window.location.href = "index.html"; // สลับกลับหน้าหลัก
+            window.location.href = "index.html";
           }
         }
 
-        // Control Globe
-        if (detected === "FIST") {
-          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
+        // Pinch Zoom
+        if (isPinchGesture && questState === "NONE") {
+          if (initialPinchDistance !== null) {
+            const delta = pinchDistance - initialPinchDistance;
+            if (Math.abs(delta) > 0.015) {
+              const zoomDelta = delta * 2.5;
+              camera.position.z -= zoomDelta;
+              camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+              initialPinchDistance = initialPinchDistance + delta * 0.3;
+            }
+          } else {
+            initialPinchDistance = pinchDistance;
+          }
           lastHandX = null; lastHandY = null;
-        } else if (detected === "PALM" && questState === "NONE") {
-          statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก...";
+
+        } else if (detected === "FIST" && questState === "NONE") {
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
+        } else if (detected === "PALM" && questState === "NONE" && holdPeaceFrames === 0) {
           if (lastHandX !== null && lastHandY !== null) {
             globe.rotation.y -= (currentX - lastHandX) * 4; 
             globe.rotation.x += (currentY - lastHandY) * 4; 
             globe.rotation.z = 0;
           }
-          lastHandX = currentX; lastHandY = currentY;
-        } else {
-          lastHandX = null; lastHandY = null;
+          lastHandX = currentX; lastHandY = currentY; initialPinchDistance = null;
+        } else if (detected !== "PEACE_2") {
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
         }
 
         initialHandDistance = null;
 
-        // Combo Quests Logic
+        // ✊✌️✋ 1. เควสเป่ายิงฉุบ (พร้อม Deadzone 0.3 วินาที)
+        if (questState === "DO_ROSHAMBO" && roshamboPhase === "PLAY") {
+          if (roshamboTimeLeft < 0.7) { 
+            const winGesture = roshamboBossHand.win;
+            let userGesture = "UNKNOWN";
+            if (detected === "FIST") userGesture = "FIST";
+            else if (detected === "PEACE_2") userGesture = "PEACE";
+            else if (detected === "PALM") userGesture = "PALM";
+
+            if (userGesture === winGesture) {
+              clearInterval(roshamboTimer);
+              actionBox.innerText = "🎯 ชนะเป่ายิงฉุบสำเร็จ!";
+              clearMissionSuccess();
+            }
+          }
+        }
+
+        // 🧠 2. เควส QUIZ
+        if (questState === "DO_QUIZ") {
+          let selectedAns = 0;
+          if (detected === "POINT_1") selectedAns = 1;
+          else if (detected === "PEACE_2") selectedAns = 2;
+          else if (detected === "LOVE_3") selectedAns = 3;
+
+          document.getElementById('opt-1').className = "quiz-option " + (selectedAns === 1 ? "selected" : "");
+          document.getElementById('opt-2').className = "quiz-option " + (selectedAns === 2 ? "selected" : "");
+          document.getElementById('opt-3').className = "quiz-option " + (selectedAns === 3 ? "selected" : "");
+
+          if (selectedAns > 0) {
+            holdTimer++;
+            playBeep(600 + holdTimer * 20, 'sine', 0.05);
+
+            if (holdTimer > 20) {
+              const correctAns = currentLockedMarker.userData.quiz.ans;
+              if (selectedAns === correctAns) {
+                document.getElementById(`opt-${selectedAns}`).className = "quiz-option correct";
+                actionBox.innerText = "🎯 ตอบถูกต้อง! กำลังกู้ภัย...";
+                playBeep(1000, 'square', 0.3);
+                setTimeout(clearMissionSuccess, 1200);
+              } else {
+                actionBox.innerText = "❌ ตอบผิด! ลองชูนิ้วเลือกคำตอบใหม่อีกครั้ง!";
+                playBeep(200, 'sawtooth', 0.2);
+                holdTimer = 0;
+              }
+            }
+          } else {
+            holdTimer = Math.max(0, holdTimer - 1);
+          }
+        }
+
+        // ⚖️ 3. เควส BALANCE (สปีดการสไลด์เร็ว 0.85)
+        if (questState === "DO_BALANCE") {
+          const handX = (1 - landmarks[0].x) * 100;
+          document.getElementById('gauge-pointer').style.left = `${Math.max(0, Math.min(94, handX))}%`;
+
+          balanceTargetLeft += balanceDirection * 0.85;
+          if (balanceTargetLeft > 68) balanceDirection = -1;
+          if (balanceTargetLeft < 8) balanceDirection = 1;
+          document.getElementById('gauge-target').style.left = `${balanceTargetLeft}%`;
+
+          if (handX >= balanceTargetLeft && handX <= (balanceTargetLeft + balanceTargetWidth)) {
+            holdTimer++;
+            playBeep(700 + holdTimer * 20, 'sine', 0.04);
+            actionBox.innerText = `⚖️ ประคองบาลานซ์ตามเป้าหมาย... (${Math.min(100, Math.round((holdTimer/30)*100))}%)`;
+
+            if (holdTimer > 30) {
+              clearMissionSuccess();
+            }
+          } else {
+            holdTimer = Math.max(0, holdTimer - 1);
+            actionBox.innerText = "👉 ประคองขยับมือตามแถบสีเหลืองที่สไลด์เร็ว!";
+          }
+        }
+
+        // 🤟 4. เควส COMBO
         if (questState === "DO_COMBO" && currentStep < 3) {
           let currentDetectedId = detected;
           if (detected === "POINT_1") currentDetectedId = "POINT_UP";
@@ -418,18 +707,33 @@
               currentStep++; holdTimer = 0; updateComboUI();
 
               if (currentStep >= 3) {
-                questState = "CLEARED";
-                currentLockedMarker.userData.cleared = true;
-                currentLockedMarker.material.color.setHex(0x00ffcc);
-                currentLockedMarker.userData.ring.material.color.setHex(0x00ffcc);
-                clearedCount++;
-                
-                playBeep(1046, 'sine', 0.4);
-                document.getElementById('score-text').innerText = `สยบภัยพิบัติแล้ว: ${clearedCount} / 5 พื้นที่`;
-                actionBox.innerText = "🎉 ปลดรหัสคาถากู้ภัยสำเร็จ! MISSION CLEAR!";
-                actionBox.style.background = "rgba(0, 255, 204, 0.25)";
-                
-                setTimeout(() => { questCard.style.display = 'none'; questState = "NONE"; }, 3000);
+                clearMissionSuccess();
+              }
+            }
+          } else {
+            holdTimer = Math.max(0, holdTimer - 1);
+          }
+        }
+
+        // 🧠 5. เควส MEMORY PATTERN
+        if (questState === "DO_MEMORY" && memoryPhase === "GUESS" && currentStep < 3) {
+          let currentDetectedId = detected;
+          if (detected === "POINT_1") currentDetectedId = "POINT_UP";
+          if (detected === "PEACE_2") currentDetectedId = "PEACE";
+          if (detected === "LOVE_3") currentDetectedId = "LOVE";
+
+          const targetGesture = memoryCombo[currentStep].id;
+          if (currentDetectedId === targetGesture) {
+            holdTimer++;
+            playBeep(500 + holdTimer * 30, 'sine', 0.05);
+
+            if (holdTimer > 15) {
+              playBeep(880, 'square', 0.15);
+              currentStep++; holdTimer = 0; updateMemoryUI();
+
+              if (currentStep >= 3) {
+                if (bombTimer) clearInterval(bombTimer);
+                clearMissionSuccess();
               }
             }
           } else {
@@ -439,7 +743,6 @@
 
       } else if (handsCount === 2) {
         if (questState === "NONE") {
-          statusText.innerText = "🖐️🖐️ แบ 2 มือ: โหมดซูมเข้า-ออก";
           const hand1 = results.multiHandLandmarks[0][0];
           const hand2 = results.multiHandLandmarks[1][0];
 
@@ -449,54 +752,111 @@
             camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
           }
           initialHandDistance = dist;
-          lastHandX = null; lastHandY = null;
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
+          holdPeaceFrames = 0;
         }
       } else {
         if (questState === "NONE") {
-          statusText.innerText = "สถานะ: ชูมือขึ้นมาเพื่อเริ่มสำรวจโลก";
           globe.rotation.y += 0.0015;
         }
-        lastHandX = null; lastHandY = null; initialHandDistance = null;
+        lastHandX = null; lastHandY = null; initialHandDistance = null; initialPinchDistance = null;
+        holdPeaceFrames = 0;
       }
 
       checkTargetLock();
     }
 
-    function checkTargetLock() {
-      if (questState === "DO_COMBO" || questState === "CLEARED") return;
+    function clearMissionSuccess() {
+      if (!currentLockedMarker || currentLockedMarker.userData.cleared) return;
 
-      let found = false;
+      if (roshamboTimer) clearInterval(roshamboTimer);
+      if (memoryTimer) clearInterval(memoryTimer);
+      if (bombTimer) clearInterval(bombTimer);
+
+      questState = "CLEARED";
+      currentLockedMarker.userData.cleared = true;
+      currentLockedMarker.material.color.setHex(0x00ffcc);
+      currentLockedMarker.userData.ring.material.color.setHex(0x00ffcc);
+      
+      clearedCount++;
+      playBeep(1046, 'sine', 0.4);
+      document.getElementById('score-text').innerText = `สยบภัยพิบัติแล้ว: ${clearedCount} / 5 พื้นที่`;
+      actionBox.innerText = "🎉 ปลดรหัสภารกิจสำเร็จ! MISSION CLEAR!";
+      actionBox.style.background = "rgba(0, 255, 204, 0.25)";
+      
+      setTimeout(() => { 
+        questCard.style.display = 'none'; 
+        questState = "NONE"; 
+        currentLockedMarker = null;
+      }, 2500);
+    }
+
+    function checkTargetLock() {
+      if (questState !== "NONE") return;
+
       if (camera.position.z < 3.2) {
-        markers.forEach(marker => {
+        activeMarkers.forEach(marker => {
           if (marker.userData.cleared) return;
           const worldPos = new THREE.Vector3();
           marker.getWorldPosition(worldPos);
 
-          if (worldPos.z > 1.8) { 
-            found = true;
-            if (currentLockedMarker !== marker) playBeep(784, 'sine', 0.1);
+          if (worldPos.z > 1.8 && questState === "NONE") { 
+            playBeep(784, 'sine', 0.1);
             currentLockedMarker = marker;
-            
-            if (questState !== "DO_COMBO") {
+            const mode = marker.userData.gameMode;
+
+            roshamboZone.style.display = 'none';
+            quizZone.style.display = 'none';
+            balanceZone.style.display = 'none';
+            comboZone.style.display = 'none';
+            memoryZone.style.display = 'none';
+
+            if (mode === "ROSHAMBO") {
+              questState = "DO_ROSHAMBO";
+              roshamboZone.style.display = 'block';
+              startRoshamboRound();
+
+            } else if (mode === "QUIZ") {
+              questState = "DO_QUIZ";
+              holdTimer = 0;
+              quizZone.style.display = 'block';
+              const qData = marker.userData.quiz;
+              document.getElementById('quiz-question').innerText = `❓ ${qData.q}`;
+              document.getElementById('opt-1').innerText = `☝️ ชู 1 นิ้ว : A. ${qData.a1}`;
+              document.getElementById('opt-2').innerText = `✌️ ชู 2 นิ้ว : B. ${qData.a2}`;
+              document.getElementById('opt-3').innerText = `🤟 ชู 3 นิ้ว : C. ${qData.a3}`;
+              actionBox.innerText = "👉 ชู 1, 2 หรือ 3 นิ้ว ค้างไว้เพื่อเลือกคำตอบ!";
+
+            } else if (mode === "BALANCE") {
+              questState = "DO_BALANCE";
+              holdTimer = 0;
+              balanceZone.style.display = 'block';
+              balanceTargetLeft = Math.floor(Math.random() * 45) + 15;
+              document.getElementById('gauge-target').style.left = `${balanceTargetLeft}%`;
+              actionBox.innerText = "👉 เลื่อนมือซ้าย-ขวา ประคองขยับตามแถบสีเหลือง!";
+
+            } else if (mode === "COMBO") {
               questState = "DO_COMBO";
               currentStep = 0; holdTimer = 0;
               currentCombo = generateRandomCombo();
-              
-              document.getElementById('disaster-name').innerText = marker.userData.name;
-              document.getElementById('disaster-coords').innerText = `พิกัด: ${marker.userData.lat}°N, ${marker.userData.lon}°E`;
+              comboZone.style.display = 'flex';
               updateComboUI();
-              questCard.style.display = 'block';
+
+            } else if (mode === "MEMORY") {
+              questState = "DO_MEMORY";
+              memoryZone.style.display = 'block';
+              startMemoryGame();
             }
+
+            document.getElementById('disaster-name').innerText = marker.userData.name;
+            document.getElementById('disaster-coords').innerText = `พิกัด: ${marker.userData.lat}°N, ${marker.userData.lon}°E`;
+            questCard.style.display = 'block';
           }
         });
       }
-
-      if (!found && questState === "DO_COMBO") {
-        questCard.style.display = 'none';
-        questState = "NONE";
-        currentLockedMarker = null;
-      }
     }
+
+    initQuestGame();
 
     const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
     hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
@@ -507,7 +867,7 @@
     function animate() {
       requestAnimationFrame(animate);
       starField.rotation.y += 0.0005;
-      markers.forEach(m => { if (m.userData.ring) m.userData.ring.rotation.z += 0.02; });
+      activeMarkers.forEach(m => { if (m.userData.ring) m.userData.ring.rotation.z += 0.02; });
       renderer.render(scene, camera);
     }
     animate();
