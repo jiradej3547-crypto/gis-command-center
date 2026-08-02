@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ศูนย์ปฏิบัติการภูมิสารสนเทศกู้ภัยโลก - Live API GIS Command (Cyberpunk Edition)</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #020509; font-family: 'Segoe UI', monospace; user-select: none; }
+    
+    #map { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; background: #020509; }
+    .leaflet-tile { filter: contrast(1.15) saturate(1.2) brightness(0.9); }
+
+    /* ตะแกรงตารางพิกัด GIS HUD */
+    #grid-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 5;
+      background-image: linear-gradient(rgba(0, 255, 204, 0.05) 1px, transparent 1px), 
+                        linear-gradient(90deg, rgba(0, 255, 204, 0.05) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    #hud {
+      position: absolute; top: 20px; left: 20px; color: #00ffcc;
+      font-size: 13px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(0, 255, 204, 0.7);
+      pointer-events: none; z-index: 10; font-family: monospace;
+      background: rgba(4, 16, 30, 0.9); padding: 12px 18px; border-radius: 8px; 
+      border: 1px solid rgba(0, 255, 204, 0.5); backdrop-filter: blur(10px);
+      box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+    }
+
+    #layer-indicator {
+      position: absolute; top: 90px; left: 20px;
+      background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc;
+      color: #ffcc00; padding: 6px 12px; border-radius: 4px; font-size: 11px;
+      font-family: monospace; z-index: 10; text-shadow: 0 0 8px rgba(255, 204, 0, 0.6);
+    }
+
+    /* กล้องสแกนมือโฮโลแกรมมุมขวาล่าง */
+    #camera-preview {
+      position: absolute; bottom: 20px; right: 20px;
+      width: 240px; height: 150px; border-radius: 10px;
+      border: 2px solid rgba(0, 255, 204, 0.85); 
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.4), inset 0 0 15px rgba(0, 255, 204, 0.3);
+      overflow: hidden; z-index: 10; background: rgba(2, 5, 9, 0.9);
+    }
+    #webcam { display: none; }
+    #output-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    /* เป้าเล็งไฮเทค */
+    .crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 40px; height: 40px; pointer-events: none; z-index: 10;
+      border: 2px solid rgba(0, 255, 204, 0.9); border-radius: 50%;
+      box-shadow: 0 0 15px rgba(0, 255, 204, 0.6); transition: all 0.2s;
+    }
+    .crosshair::before, .crosshair::after { content: ''; position: absolute; background: #00ffcc; box-shadow: 0 0 8px #00ffcc; }
+    .crosshair::before { top: 50%; left: -10px; right: -10px; height: 2px; transform: translateY(-50%); }
+    .crosshair::after { left: 50%; top: -10px; bottom: -10px; width: 2px; transform: translateX(-50%); }
+    
+    .crosshair.locked { border-color: #ff3366; box-shadow: 0 0 20px rgba(255, 51, 102, 0.9); scale: 1.1; }
+    .crosshair.locked::before, .crosshair.locked::after { background: #ff3366; box-shadow: 0 0 10px #ff3366; }
+
+    #target-card {
+      position: absolute; top: 20px; right: 20px; width: 310px;
+      background: rgba(4, 16, 30, 0.95); border: 2px solid #ff3366;
+      backdrop-filter: blur(12px); border-radius: 8px; padding: 14px; color: #fff;
+      display: none; z-index: 10; font-family: monospace;
+      box-shadow: 0 0 25px rgba(255, 51, 102, 0.4); animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    #target-card h3 { margin: 0 0 4px 0; color: #ff3366; font-size: 14px; text-shadow: 0 0 8px rgba(255, 51, 102, 0.6); }
+    #target-card p { margin: 3px 0; font-size: 11px; color: #b3f0ff; line-height: 1.4; white-space: pre-line; }
+    .badge-alert { display: inline-block; padding: 2px 8px; background: rgba(255, 51, 102, 0.25); border: 1px solid #ff3366; color: #ff3366; font-size: 10px; font-weight: bold; border-radius: 3px; margin-bottom: 6px; }
+
+    .nav-menu { position: absolute; bottom: 20px; left: 20px; z-index: 10; display: flex; gap: 8px; }
+    .nav-btn {
+      background: rgba(4, 16, 30, 0.9); border: 1px solid rgba(0, 255, 204, 0.6);
+      color: #00ffcc; padding: 8px 16px; border-radius: 20px; font-size: 11px;
+      cursor: pointer; font-family: monospace; transition: all 0.3s;
+      box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+    }
+    .nav-btn:hover { background: rgba(0, 255, 204, 0.3); box-shadow: 0 0 15px #00ffcc; }
+
+    #coord-display {
+      position: absolute; top: 20px; right: 20px;
+      background: rgba(4, 16, 30, 0.9); border: 1px solid rgba(0, 255, 204, 0.5);
+      color: #00ffcc; padding: 10px 15px; border-radius: 6px; font-size: 11px;
+      font-family: monospace; z-index: 9; text-align: right; box-shadow: 0 0 15px rgba(0, 0, 0, 0.6);
+    }
+
+    /* คลื่นช็อกเวฟแผ่นดินไหว */
+    @keyframes earthquakeMarkerPulse {
+      0% { transform: scale(0.2); opacity: 1; }
+      100% { transform: scale(3.5); opacity: 0; }
+    }
+    .quake-pulse {
+      border-radius: 50%; background: rgba(255, 51, 102, 0.15);
+      border: 2px solid #ff3366; position: absolute; pointer-events: none;
+      animation: earthquakeMarkerPulse 2.2s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+    }
+
+    /* สไตล์ไอคอนไฟป่า โรคระบาด เรือ */
+    .icon-marker {
+      font-size: 20px; text-align: center; line-height: 1; user-select: none;
+    }
+    .fire-marker-icon { filter: drop-shadow(0 0 8px #ff3300) drop-shadow(0 0 16px #ff9900); }
+    .virus-marker-icon { filter: drop-shadow(0 0 8px #cc66ff) drop-shadow(0 0 16px #9900cc); }
+    .vessel-marker-icon { filter: drop-shadow(0 0 8px #00ccff) drop-shadow(0 0 16px #0066ff); font-size: 18px; }
+  </style>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <div id="map"></div>
+  <div id="grid-overlay"></div>
+  <div class="crosshair" id="crosshair"></div>
+
+  <div id="hud">
+    <h2 style="margin: 0 0 4px 0; font-size: 16px; color: #00ffcc;">📡 LIVE GIS TACTICAL COMMAND</h2>
+    <p id="status" style="margin: 0; font-size: 11px; color: #b3f0ff;">[ SYSTEM ONLINE ] ชูมือขึ้นมาเพื่อสแกนและควบคุม</p>
+  </div>
+
+  <div id="layer-indicator">
+    🗺️ LAYER: GOOGLE SATELLITE (ทำท่าค้างไว้เพื่อสลับแผนที่)
+  </div>
+
+  <div id="coord-display">
+    LAT: <span id="lat-val">13.7563</span> | LNG: <span id="lng-val">100.5018</span><br>
+    LIVE API: <span style="color:#00ffcc;">RADAR</span>, <span style="color:#ff3366;">QUAKE</span>, <span style="color:#ff9900;">FIRE 🔥</span>, <span style="color:#cc66ff;">VIRUS 🦠</span>, <span style="color:#00ccff;">VESSEL 🚢</span>
+  </div>
+
+  <div id="target-card">
+    <span class="badge-alert" id="target-badge">TARGET LOCKED</span>
+    <h3 id="target-name">-</h3>
+    <p id="target-coords">-</p>
+    <p id="target-desc">-</p>
+  </div>
+
+  <div class="nav-menu">
+    <button class="nav-btn" onclick="window.location.href='index.html'">🌐 3D GLOBE</button>
+    <button class="nav-btn" style="background:rgba(0,255,204,0.25); border-color:#00ffcc;">🗺️ 2D MAP</button>
+    <button class="nav-btn" onclick="window.location.href='quest.html'">🎮 QUEST</button>
+  </div>
+
+  <div id="camera-preview">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output-canvas"></canvas>
+  </div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq = 880) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+      } catch (e) {}
+    }
+
+    // --- Map Base Layers Setup ---
+    const map = L.map('map', { zoomControl: false, fadeAnimation: true }).setView([13.7563, 100.5018], 5);
+
+    const tileLayers = {
+      1: L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { maxZoom: 18, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
+      2: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }),
+      3: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 })
+    };
+
+    let currentLayerMode = 1;
+    tileLayers[1].addTo(map);
+
+    const layerIndicator = document.getElementById('layer-indicator');
+    function switchMapLayer(mode) {
+      if (currentLayerMode === mode) return;
+      map.removeLayer(tileLayers[currentLayerMode]);
+      currentLayerMode = mode;
+      tileLayers[mode].addTo(map);
+      playBeep(1000);
+
+      if (mode === 1) layerIndicator.innerText = "🗺️ LAYER: GOOGLE SATELLITE HYBRID";
+      else if (mode === 2) layerIndicator.innerText = "🗺️ LAYER: CYBERPUNK DARK MATTER";
+      else if (mode === 3) layerIndicator.innerText = "🗺️ LAYER: ESRI HIGH-RES SATELLITE";
+    }
+
+    // --- เส้น Leader Line โยงจากจุดปักหมุดไปการ์ด Popup ---
+    let leaderLinePolyline = null;
+    function updateLeaderLine(targetLatLng) {
+      if (leaderLinePolyline) map.removeLayer(leaderLinePolyline);
+
+      const cardElement = document.getElementById('target-card');
+      const cardRect = cardElement.getBoundingClientRect();
+      const cardContainerPoint = L.point(cardRect.left, cardRect.top + cardRect.height / 2);
+      const cardLatLng = map.containerPointToLatLng(cardContainerPoint);
+
+      leaderLinePolyline = L.polyline([targetLatLng, cardLatLng], {
+        color: '#ff3366',
+        weight: 2,
+        dashArray: '4, 8',
+        opacity: 0.85
+      }).addTo(map);
+    }
+
+    function clearLeaderLine() {
+      if (leaderLinePolyline) {
+        map.removeLayer(leaderLinePolyline);
+        leaderLinePolyline = null;
+      }
+    }
+
+    // --- 1. Rain Radar API ---
+    fetch('https://api.rainviewer.com/public/weather-maps.json')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.radar?.past?.length > 0) {
+          const lastFrame = data.radar.past[data.radar.past.length - 1];
+          L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${lastFrame.time}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0.6, zIndex: 10 }).addTo(map);
+        }
+      }).catch(()=>{});
+
+    // --- 2. Earthquake API ---
+    const quakeMarkers = [];
+    fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson')
+      .then(res => res.json())
+      .then(geoJson => {
+        L.geoJSON(geoJson, {
+          pointToLayer: (feature, latlng) => {
+            const mag = feature.properties.mag || 4.5;
+            const shockwaveSize = Math.max(mag * 22, 35);
+            
+            const shockwave = L.divIcon({
+              className: 'dummy',
+              html: `<div class="quake-pulse" style="width:${shockwaveSize}px; height:${shockwaveSize}px; margin-left:-${shockwaveSize/2}px; margin-top:-${shockwaveSize/2}px;"></div>`
+            });
+            L.marker(latlng, { icon: shockwave }).addTo(map);
+
+            const marker = L.circleMarker(latlng, { radius: 6, fillColor: "#ff3366", color: "#fff", weight: 1.5, fillOpacity: 0.95 });
+            marker.userData = { ...feature.properties, type: 'QUAKE' };
+            quakeMarkers.push(marker);
+            return marker;
+          }
+        }).addTo(map);
+      }).catch(()=>{});
+
+    // --- 3. Wildfire API ---
+    const fireMarkers = [];
+    const fireIcon = L.divIcon({ className: 'icon-marker fire-marker-icon', html: '🔥', iconSize: [20, 20], iconAnchor: [10, 10] });
+
+    fetch('https://eonet.gsfc.nasa.gov/api/v3/categories/wildfires')
+      .then(res => res.json())
+      .then(data => {
+        if (data.events) {
+          data.events.slice(0, 35).forEach(event => {
+            const geom = event.geometry[event.geometry.length - 1];
+            if (geom?.coordinates) {
+              const marker = L.marker([geom.coordinates[1], geom.coordinates[0]], { icon: fireIcon }).addTo(map);
+              marker.userData = { name: event.title, type: 'FIRE', date: geom.date };
+              fireMarkers.push(marker);
+            }
+          });
+        }
+      }).catch(()=>{});
+
+    // --- 4. Disease Outbreak API (ใช้อายคอน 🦠) ---
+    const diseaseMarkers = [];
+    const virusIcon = L.divIcon({ className: 'icon-marker virus-marker-icon', html: '🦠', iconSize: [22, 22], iconAnchor: [11, 11] });
+
+    fetch('https://disease.sh/v3/covid-19/countries')
+      .then(res => res.json())
+      .then(data => {
+        data.slice(0, 35).forEach(country => {
+          if (country.countryInfo && country.countryInfo.lat) {
+            const marker = L.marker([country.countryInfo.lat, country.countryInfo.long], { icon: virusIcon }).addTo(map);
+            marker.userData = {
+              type: 'DISEASE',
+              country: country.country,
+              active: country.active,
+              cases: country.cases,
+              todayCases: country.todayCases
+            };
+            diseaseMarkers.push(marker);
+          }
+        });
+      }).catch(()=>{});
+
+    // --- 5. Vessel Tracking AIS Live API (ตำแหน่งเรือพาณิชย์ 🚢) ---
+    const vesselMarkers = [];
+    const vesselIcon = L.divIcon({ className: 'icon-marker vessel-marker-icon', html: '🚢', iconSize: [20, 20], iconAnchor: [10, 10] });
+
+    // จำลองดึงจุดพิกัดเส้นทางจราจรเรือพาณิชย์หลักทั่วโลกสด
+    const mockVessels = [
+      { name: "EVER GIVEN (Cargo)", lat: 29.93, lng: 32.55, speed: "14.2 knots", destination: "SUEZ CANAL" },
+      { name: "MAERSK MC-KINNEY (Container)", lat: 1.28, lng: 103.85, speed: "18.5 knots", destination: "SINGAPORE PORT" },
+      { name: "OCEAN GIANT (Bulk Carrier)", lat: 13.08, lng: 100.88, speed: "12.0 knots", destination: "LAEM CHABANG" },
+      { name: "COSCO SHIPPING (Tanker)", lat: 22.31, lng: 114.16, speed: "16.1 knots", destination: "HONG KONG" },
+      { name: "MSC OSCAR (Container)", lat: 25.03, lng: 121.56, speed: "20.4 knots", destination: "TAIPEI PORT" }
+    ];
+
+    mockVessels.forEach(v => {
+      const marker = L.marker([v.lat, v.lng], { icon: vesselIcon }).addTo(map);
+      marker.userData = { type: 'VESSEL', ...v };
+      vesselMarkers.push(marker);
+    });
+
+    // --- Scanner Logic ---
+    const latVal = document.getElementById('lat-val'), lngVal = document.getElementById('lng-val');
+    const targetCard = document.getElementById('target-card'), crosshair = document.getElementById('crosshair');
+    const targetBadge = document.getElementById('target-badge');
+    let currentLockedTarget = null;
+
+    map.on('move', () => {
+      const center = map.getCenter();
+      latVal.innerText = center.lat.toFixed(4); lngVal.innerText = center.lng.toFixed(4);
+
+      let found = false;
+      const allTargets = [...quakeMarkers, ...fireMarkers, ...diseaseMarkers, ...vesselMarkers];
+      
+      if (map.getZoom() > 3) {
+        for (const m of allTargets) {
+          if (center.distanceTo(m.getLatLng()) < 160000) { 
+            found = true;
+            
+            // อัปเดตเส้น Leader Line ลากตามจุดล็อกเป้าตลอดเวลา
+            updateLeaderLine(m.getLatLng());
+
+            if (currentLockedTarget !== m) {
+              currentLockedTarget = m;
+              playBeep(950); crosshair.classList.add('locked');
+
+              if (m.userData.type === 'QUAKE') {
+                targetCard.style.borderColor = '#ff3366';
+                targetBadge.innerText = "🌋 EARTHQUAKE ALERT";
+                const eventTime = new Date(m.userData.time).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'medium' });
+                document.getElementById('target-name').innerText = m.userData.place || 'แผ่นดินไหว';
+                document.getElementById('target-coords').innerText = `พิกัด: ${m.getLatLng().lat.toFixed(2)}°N, ${m.getLatLng().lng.toFixed(2)}°E`;
+                document.getElementById('target-desc').innerText = `ความรุนแรง: ${m.userData.mag} M\nเวลาที่เกิด: ${eventTime}`;
+              } else if (m.userData.type === 'FIRE') {
+                targetCard.style.borderColor = '#ff9900';
+                targetBadge.innerText = "🔥 WILDFIRE DETECTED";
+                const fireDate = new Date(m.userData.date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+                document.getElementById('target-name').innerText = m.userData.name;
+                document.getElementById('target-coords').innerText = `พิกัด: ${m.getLatLng().lat.toFixed(2)}°N, ${m.getLatLng().lng.toFixed(2)}°E`;
+                document.getElementById('target-desc').innerText = `รายงานจุดความร้อนดาวเทียม NASA\nเวลาสแกนพบ: ${fireDate}`;
+              } else if (m.userData.type === 'DISEASE') {
+                targetCard.style.borderColor = '#cc66ff';
+                targetBadge.innerText = "🦠 DISEASE OUTBREAK";
+                document.getElementById('target-name').innerText = `ศูนย์เฝ้าระวังโรคระบาด (${m.userData.country})`;
+                document.getElementById('target-coords').innerText = `พิกัด: ${m.getLatLng().lat.toFixed(2)}°N, ${m.getLatLng().lng.toFixed(2)}°E`;
+                document.getElementById('target-desc').innerText = `เคสสะสม: ${m.userData.cases.toLocaleString()} ราย\nเคสใหม่วันนี้: ${m.userData.todayCases.toLocaleString()} ราย`;
+              } else if (m.userData.type === 'VESSEL') {
+                targetCard.style.borderColor = '#00ccff';
+                targetBadge.innerText = "🚢 AIS VESSEL TRACKING";
+                document.getElementById('target-name').innerText = m.userData.name;
+                document.getElementById('target-coords').innerText = `พิกัด: ${m.getLatLng().lat.toFixed(2)}°N, ${m.getLatLng().lng.toFixed(2)}°E`;
+                document.getElementById('target-desc').innerText = `ความเร็วเรือ: ${m.userData.speed}\nปลายทาง: ${m.userData.destination}`;
+              }
+              targetCard.style.display = 'block';
+            }
+            break;
+          }
+        }
+      }
+
+      if (!found && currentLockedTarget) {
+        currentLockedTarget = null; 
+        crosshair.classList.remove('locked'); 
+        targetCard.style.display = 'none';
+        clearLeaderLine();
+      }
+    });
+
+    // --- Hologram Camera Engine & Gesture Detection ---
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusText = document.getElementById('status');
+
+    let lastHandX = null, lastHandY = null, initialHandDistance = null, initialZoomLevel = null;
+
+    let secretToggleCount = 0, lastSecretGesture = "NONE", secretPhase = "TOGGLE", secretTimer = null;
+    let holdGesture = "NONE", holdTimerCount = 0;
+
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],        
+      [0,5],[5,6],[6,7],[7,8],        
+      [5,9],[9,10],[10,11],[11,12],   
+      [9,13],[13,14],[14,15],[15,16], 
+      [13,17],[17,18],[18,19],[19,20],[0,17] 
+    ];
+
+    function drawHologramHand(multiHandLandmarks) {
+      canvasElement.width = 240; canvasElement.height = 150;
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      canvasCtx.globalAlpha = 0.35;
+      canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.globalAlpha = 1.0;
+
+      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.05)';
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (multiHandLandmarks) {
+        for (const landmarks of multiHandLandmarks) {
+          canvasCtx.strokeStyle = '#00ffcc';
+          canvasCtx.lineWidth = 2.5;
+          canvasCtx.shadowColor = '#00ffcc'; canvasCtx.shadowBlur = 8;
+          for (const connection of HAND_CONNECTIONS) {
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(landmarks[connection[0]].x * canvasElement.width, landmarks[connection[0]].y * canvasElement.height);
+            canvasCtx.lineTo(landmarks[connection[1]].x * canvasElement.width, landmarks[connection[1]].y * canvasElement.height);
+            canvasCtx.stroke();
+          }
+          for (const lm of landmarks) {
+            canvasCtx.fillStyle = '#ff3366';
+            canvasCtx.shadowColor = '#ff3366'; canvasCtx.shadowBlur = 6;
+            canvasCtx.beginPath();
+            canvasCtx.arc(lm.x * canvasElement.width, lm.y * canvasElement.height, 3, 0, 2 * Math.PI);
+            canvasCtx.fill();
+          }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function detectGesture(landmarks) {
+      const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isFist) return "FIST";
+
+      const isPointUp = landmarks[8].y < landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPointUp) return "POINT_1";
+
+      const isPeace = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPeace) return "PEACE_2";
+
+      const isLove = landmarks[8].y < landmarks[6].y && landmarks[20].y < landmarks[18].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y;
+      if (isLove) return "LOVE_3";
+
+      const isOpenPalm = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y < landmarks[14].y && landmarks[20].y < landmarks[18].y;
+      if (isOpenPalm) return "PALM";
+
+      return "UNKNOWN";
+    }
+
+    function resetSecretCode() {
+      secretToggleCount = 0; secretPhase = "TOGGLE"; lastSecretGesture = "NONE";
+      if (secretTimer) clearTimeout(secretTimer);
+    }
+
+    function onResults(results) {
+      drawHologramHand(results.multiHandLandmarks);
+      const handsCount = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+
+      if (handsCount === 1) {
+        const lm = results.multiHandLandmarks[0];
+        const detected = detectGesture(lm);
+
+        // 🔐 1. รหัสลับวาร์ปกลับหน้า index.html (กำ-แบ 5 รอบ + ท่า 🤟)
+        if (secretPhase === "TOGGLE") {
+          if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
+            secretToggleCount++; lastSecretGesture = detected;
+            playBeep(400 + secretToggleCount * 100);
+
+            if (secretTimer) clearTimeout(secretTimer);
+            secretTimer = setTimeout(resetSecretCode, 3000);
+
+            if (secretToggleCount >= 10) {
+              secretPhase = "WAIT_LOVE";
+              playBeep(880);
+            }
+          }
+        } else if (secretPhase === "WAIT_LOVE") {
+          if (detected === "LOVE_3") {
+            playBeep(1200);
+            resetSecretCode();
+            window.location.href = "index.html";
+          }
+        }
+
+        // ⏳ 2. ระบบชูค้างเพื่อสลับชั้นสกินแผนที่
+        if (["POINT_1", "PEACE_2", "LOVE_3"].includes(detected) && secretPhase !== "WAIT_LOVE") {
+          if (holdGesture === detected) {
+            holdTimerCount++;
+            statusText.innerText = `⏳ กำลังเปลี่ยนแผนที่: ทำท่าค้างไว้ (${Math.round((holdTimerCount/20)*100)}%)`;
+            if (holdTimerCount >= 20) {
+              if (detected === "POINT_1") switchMapLayer(1);
+              else if (detected === "PEACE_2") switchMapLayer(2);
+              else if (detected === "LOVE_3") switchMapLayer(3);
+              holdTimerCount = 0;
+            }
+          } else {
+            holdGesture = detected;
+            holdTimerCount = 0;
+          }
+        } else {
+          holdGesture = "NONE";
+          holdTimerCount = 0;
+        }
+
+        // 🖐️ 3. การควบคุมการเลื่อนแผนที่ (สลับทิศซ้าย-ขวา)
+        if (detected === "FIST") {
+          statusText.innerText = "[ STANDBY ] ✊ กำมือ: หยุดการเลื่อนแผนที่";
+          lastHandX = null; lastHandY = null;
+        } else if (detected === "PALM") {
+          statusText.innerText = "[ PANNING ] 🖐️ แบมือ: เลื่อนส่องภัยพิบัติเรียลไทม์";
+          if (lastHandX !== null && lastHandY !== null) {
+            const dx = (lm[0].x - lastHandX) * 750;
+            const dy = -(lm[0].y - lastHandY) * 550;
+            map.panBy([dx, dy], { animate: false });
+          }
+          lastHandX = lm[0].x; lastHandY = lm[0].y;
+        } else if (!["POINT_1", "PEACE_2", "LOVE_3"].includes(detected)) {
+          lastHandX = null; lastHandY = null;
+        }
+        initialHandDistance = null; initialZoomLevel = null;
+
+      } else if (handsCount === 2) {
+        statusText.innerText = "[ ZOOMING ] 🖐️🖐️ สองมือ: โหมดซูมเข้า-ออก";
+        const h1 = results.multiHandLandmarks[0][0], h2 = results.multiHandLandmarks[1][0];
+        const dist = Math.hypot(h1.x - h2.x, h1.y - h2.y);
+        
+        if (initialHandDistance === null) {
+          initialHandDistance = dist; initialZoomLevel = map.getZoom();
+        } else if (initialZoomLevel !== null) {
+          const newZoom = Math.max(3, Math.min(18, initialZoomLevel + (dist - initialHandDistance) * 10));
+          map.setZoom(newZoom, { animate: false });
+        }
+        lastHandX = null; lastHandY = null;
+      } else {
+        statusText.innerText = "[ SYSTEM ONLINE ] ชูมือขึ้นมาเพื่อสั่งการแผนที่";
+        lastHandX = null; lastHandY = null; initialHandDistance = null; initialZoomLevel = null;
+      }
+    }
+
+    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    new Camera(videoElement, { onFrame: async () => { await hands.send({ image: videoElement }); }, width: 640, height: 480 }).start();
+  </script>
+</body>
+</html>

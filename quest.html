@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ศูนย์ปฏิบัติการภูมิสารสนเทศกู้ภัยโลก - หน้าเควสกู้ภัย</title>
+  <style>
+    body { margin: 0; overflow: hidden; background-color: #020509; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+    
+    /* กล่องกล้องสแกนมือโฮโลแกรม (ทรงสี่เหลี่ยมผืนผ้า Sci-Fi) */
+    #camera-preview {
+      position: absolute; bottom: 25px; right: 25px;
+      width: 200px; height: 130px;
+      border-radius: 8px;
+      border: 2px solid rgba(0, 255, 204, 0.8); 
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.4), inset 0 0 15px rgba(0, 255, 204, 0.3);
+      overflow: hidden; z-index: 10; background: rgba(2, 5, 9, 0.7);
+    }
+    #webcam { display: none; }
+    #output-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    #hud {
+      position: absolute; top: 25px; left: 25px; color: #00ffcc;
+      font-size: 15px; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+      pointer-events: none; z-index: 10; font-family: monospace;
+    }
+
+    #layer-indicator {
+      position: absolute; top: 95px; left: 25px;
+      background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc;
+      color: #ffcc00; padding: 6px 12px; border-radius: 4px; font-size: 12px;
+      font-family: monospace; z-index: 10;
+    }
+
+    #quest-card {
+      position: absolute; top: 25px; right: 25px; width: 360px;
+      background: rgba(4, 16, 30, 0.92); border: 1px solid rgba(0, 255, 204, 0.6);
+      backdrop-filter: blur(10px); border-radius: 10px; padding: 16px; color: #fff;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 204, 0.3);
+      display: none; z-index: 10; font-family: monospace;
+    }
+    #quest-card h3 { margin: 0 0 6px 0; color: #ff3366; text-shadow: 0 0 8px rgba(255, 51, 102, 0.6); font-size: 16px; }
+    #quest-card p { margin: 4px 0; font-size: 13px; color: #b3f0ff; }
+    .badge { display: inline-block; padding: 2px 8px; background: rgba(255, 51, 102, 0.2); border: 1px solid #ff3366; color: #ff3366; font-weight: bold; font-size: 11px; border-radius: 3px; margin-bottom: 6px; }
+    
+    .combo-container { display: flex; justify-content: space-between; margin-top: 12px; gap: 8px; }
+    .combo-box {
+      flex: 1; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(0, 255, 204, 0.3);
+      border-radius: 6px; padding: 10px 5px; text-align: center; font-size: 24px; transition: all 0.3s;
+    }
+    .combo-box.active { border-color: #ffcc00; background: rgba(255, 204, 0, 0.2); box-shadow: 0 0 10px #ffcc00; }
+    .combo-box.done { border-color: #00ffcc; background: rgba(0, 255, 204, 0.25); box-shadow: 0 0 10px #00ffcc; }
+
+    .action-instruction {
+      margin-top: 12px; padding: 8px; background: rgba(0, 255, 204, 0.1);
+      border-left: 3px solid #00ffcc; font-weight: bold; color: #e6ffff; font-size: 13px; text-align: center;
+    }
+
+    .nav-btn {
+      background: rgba(0, 20, 40, 0.8); border: 1px solid rgba(0, 255, 204, 0.6);
+      color: #00ffcc; padding: 8px 16px; border-radius: 20px; font-size: 12px;
+      cursor: pointer; font-family: monospace; transition: all 0.3s;
+      box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+    }
+    .nav-btn:hover { background: rgba(0, 255, 204, 0.3); box-shadow: 0 0 15px #00ffcc; }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <div id="hud">
+    <h2 style="margin: 0 0 5px 0; font-size: 20px;">🛰️ ศูนย์ปฏิบัติการภูมิสารสนเทศกู้ภัยโลก</h2>
+    <p id="status" style="margin: 3px 0;">สถานะ: ชูมือขึ้นมาเพื่อเริ่มสำรวจโลก</p>
+    <p id="score-text" style="color: #ffcc00; font-weight: bold; font-size: 15px; margin: 5px 0;">สยบภัยพิบัติแล้ว: 0 / 5 พื้นที่</p>
+  </div>
+
+  <div id="layer-indicator">
+    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว เพื่อสลับสกินโลก)
+  </div>
+
+  <!-- แถบปุ่มสลับหน้าไป 3D Globe, 2D Map และ Quest -->
+  <div style="position: absolute; bottom: 20px; left: 25px; z-index: 100; display: flex; gap: 10px;">
+    <button class="nav-btn" onclick="window.location.href='index.html'">🌐 3D GLOBE</button>
+    <button class="nav-btn" onclick="window.location.href='map.html'">🗺️ 2D MAP</button>
+    <button class="nav-btn" style="background: rgba(0, 255, 204, 0.25); border-color: #00ffcc;">🎮 QUEST</button>
+  </div>
+
+  <div id="quest-card">
+    <span id="quest-badge" class="badge">DISASTER DETECTED</span>
+    <h3 id="disaster-name">เตือนภัยพิบัติ</h3>
+    <p id="disaster-coords">พิกัด: -</p>
+    
+    <div class="combo-container">
+      <div id="step-0" class="combo-box">❓</div>
+      <div id="step-1" class="combo-box">❓</div>
+      <div id="step-2" class="combo-box">❓</div>
+    </div>
+
+    <div id="action-box" class="action-instruction">👉 ปลดรหัสคาถากู้ภัยตามลำดับ!</div>
+  </div>
+
+  <div id="camera-preview">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output-canvas"></canvas>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq = 440, type = 'sine', duration = 0.1) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    // 🌌 Dynamic Starfield Background
+    const starsGeo = new THREE.BufferGeometry();
+    const starsCount = 2000;
+    const starPositions = new Float32Array(starsCount * 3);
+    for(let i=0; i<starsCount*3; i++) {
+      starPositions[i] = (Math.random() - 0.5) * 120;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starsMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 });
+    const starField = new THREE.Points(starsGeo, starsMat);
+    scene.add(starField);
+
+    // 🌍 ลูกโลก 3D & สกินทั้ง 3 โหมด
+    const globeRadius = 2;
+    const geometry = new THREE.SphereGeometry(globeRadius, 128, 128);
+    const textureLoader = new THREE.TextureLoader();
+
+    const texDay = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
+    const texNight = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg');
+    const texTopo = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
+    const bumpTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
+
+    const material = new THREE.MeshPhongMaterial({ map: texDay, bumpMap: bumpTexture, bumpScale: 0.04, roughness: 0.7, shininess: 15 });
+    const globe = new THREE.Mesh(geometry, material);
+    scene.add(globe);
+
+    const atmosGeo = new THREE.SphereGeometry(globeRadius + 0.08, 64, 64);
+    const atmosMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.12, side: THREE.BackSide });
+    scene.add(new THREE.Mesh(atmosGeo, atmosMat));
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    dirLight.position.set(5, 3, 5);
+    scene.add(dirLight);
+    camera.position.z = 4.5;
+
+    const disasterPresets = [
+      { name: "พายุไต้ฝุ่นแปซิฟิก", lat: 15, lon: 120 },
+      { name: "รอยเลื่อนซานแอนเดรียส", lat: 36, lon: -120 },
+      { name: "ภูเขาไฟปะทุแอนดีส", lat: -23, lon: -68 },
+      { name: "คลื่นความร้อนซาฮารา", lat: 20, lon: 10 },
+      { name: "รอยเลื่อนพิบัติอัลไพน์", lat: -43, lon: 170 }
+    ];
+
+    const markers = [];
+    let clearedCount = 0;
+
+    function latLonToVector3(lat, lon, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      return new THREE.Vector3(-(radius * Math.sin(phi) * Math.cos(theta)), (radius * Math.cos(phi)), (radius * Math.sin(phi) * Math.sin(theta)));
+    }
+
+    disasterPresets.forEach(data => {
+      const pos = latLonToVector3(data.lat, data.lon, globeRadius + 0.025);
+      const markerMesh = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff3366 }));
+      markerMesh.position.copy(pos);
+      
+      const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.09, 32), new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
+      ringMesh.lookAt(pos.clone().multiplyScalar(2));
+      markerMesh.add(ringMesh);
+
+      markerMesh.userData = { ...data, cleared: false, ring: ringMesh };
+      globe.add(markerMesh);
+      markers.push(markerMesh);
+    });
+
+    const gestureList = [
+      { id: "OK", emoji: "👌", name: "ทำมือ OK" },
+      { id: "PALM", emoji: "✋", name: "แบมือ 5 นิ้ว" },
+      { id: "PEACE", emoji: "✌️", name: "ชู 2 นิ้ว" },
+      { id: "POINT_UP", emoji: "☝️", name: "ชี้ขึ้นฟ้า" },
+      { id: "LOVE", emoji: "🤟", name: "ชูไอเลิฟยู" }
+    ];
+
+    let lastHandX = null, lastHandY = null, initialHandDistance = null;
+    let currentLockedMarker = null;
+    let questState = "NONE"; 
+    let currentCombo = [];
+    let currentStep = 0;
+    let holdTimer = 0;
+    let currentLayerMode = 1;
+
+    // รหัสลับสลับกลับหน้า index.html
+    let secretToggleCount = 0;
+    let lastSecretGesture = "NONE";
+    let secretPhase = "TOGGLE";
+    let secretTimer = null;
+
+    const questCard = document.getElementById('quest-card');
+    const actionBox = document.getElementById('action-box');
+    const statusText = document.getElementById('status');
+    const layerIndicator = document.getElementById('layer-indicator');
+
+    function detectGesture(landmarks) {
+      const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isFist) return "FIST";
+
+      const isPointUp = landmarks[8].y < landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPointUp) return "POINT_1";
+
+      const isPeace = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPeace) return "PEACE_2";
+
+      const isLove = landmarks[8].y < landmarks[6].y && landmarks[20].y < landmarks[18].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y;
+      if (isLove) return "LOVE_3";
+
+      const isOpenPalm = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y < landmarks[14].y && landmarks[20].y < landmarks[18].y;
+      if (isOpenPalm) return "PALM";
+
+      const isOk = Math.hypot(landmarks[4].x - landmarks[8].x, landmarks[4].y - landmarks[8].y) < 0.05;
+      if (isOk) return "OK";
+
+      return "UNKNOWN";
+    }
+
+    function switchSatelliteLayer(mode) {
+      if (currentLayerMode === mode) return;
+      currentLayerMode = mode;
+      playBeep(900, 'square', 0.15);
+
+      if (mode === 1) {
+        material.map = texDay;
+        layerIndicator.innerText = "MAP LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
+      } else if (mode === 2) {
+        material.map = texNight;
+        layerIndicator.innerText = "MAP LAYER: EARTH AT NIGHT (แสงไฟเมืองกลางคืน)";
+      } else if (mode === 3) {
+        material.map = texTopo;
+        layerIndicator.innerText = "MAP LAYER: TOPOGRAPHIC HEIGHT (ภูมิประเทศความสูง)";
+      }
+      material.needsUpdate = true;
+    }
+
+    function generateRandomCombo() {
+      const shuffled = [...gestureList].sort(() => 0.5 - Math.random());
+      return [shuffled[0], shuffled[1], shuffled[2]];
+    }
+
+    function updateComboUI() {
+      for (let i = 0; i < 3; i++) {
+        const box = document.getElementById(`step-${i}`);
+        box.innerText = currentCombo[i].emoji;
+        box.className = "combo-box";
+        if (i < currentStep) box.classList.add("done");
+        else if (i === currentStep) box.classList.add("active");
+      }
+      if (currentStep < 3) {
+        actionBox.innerText = `👉 ท่าที่ ${currentStep + 1}: ทำท่า ${currentCombo[currentStep].emoji} (${currentCombo[currentStep].name}) ค้างไว้!`;
+      }
+    }
+
+    function resetSecretCode() {
+      secretToggleCount = 0; secretPhase = "TOGGLE"; lastSecretGesture = "NONE";
+      if (secretTimer) clearTimeout(secretTimer);
+    }
+
+    // 🖐️ วาดโครงกระดูกมือโฮโลแกรมดิจิทัล
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],        
+      [0,5],[5,6],[6,7],[7,8],        
+      [5,9],[9,10],[10,11],[11,12],   
+      [9,13],[13,14],[14,15],[15,16], 
+      [13,17],[17,18],[18,19],[19,20],[0,17] 
+    ];
+
+    function drawHologramHand(multiHandLandmarks) {
+      canvasElement.width = videoElement.videoWidth || 320;
+      canvasElement.height = videoElement.videoHeight || 200;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      canvasCtx.globalAlpha = 0.35;
+      canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.globalAlpha = 1.0;
+
+      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.05)';
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (multiHandLandmarks) {
+        for (const landmarks of multiHandLandmarks) {
+          canvasCtx.strokeStyle = '#00ffcc';
+          canvasCtx.lineWidth = 2.5;
+          canvasCtx.shadowColor = '#00ffcc';
+          canvasCtx.shadowBlur = 8;
+
+          for (const connection of HAND_CONNECTIONS) {
+            const p1 = landmarks[connection[0]];
+            const p2 = landmarks[connection[1]];
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(p1.x * canvasElement.width, p1.y * canvasElement.height);
+            canvasCtx.lineTo(p2.x * canvasElement.width, p2.y * canvasElement.height);
+            canvasCtx.stroke();
+          }
+
+          for (const lm of landmarks) {
+            canvasCtx.fillStyle = '#ff3366';
+            canvasCtx.shadowColor = '#ff3366';
+            canvasCtx.shadowBlur = 6;
+            canvasCtx.beginPath();
+            canvasCtx.arc(lm.x * canvasElement.width, lm.y * canvasElement.height, 3, 0, 2 * Math.PI);
+            canvasCtx.fill();
+          }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function onResults(results) {
+      drawHologramHand(results.multiHandLandmarks);
+
+      const handsCount = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+
+      if (handsCount === 1) {
+        const landmarks = results.multiHandLandmarks[0];
+        const currentX = landmarks[0].x;
+        const currentY = landmarks[0].y;
+        const detected = detectGesture(landmarks);
+
+        // สลับชั้นภาพดาวเทียมด้วย 1, 2, 3 นิ้ว
+        if (detected === "POINT_1") switchSatelliteLayer(1);
+        else if (detected === "PEACE_2") switchSatelliteLayer(2);
+        else if (detected === "LOVE_3") switchSatelliteLayer(3);
+
+        // 🔐 รหัสลับสลับกลับหน้า index.html (กำ-แบ 5 ครั้ง + ท่า 🤟)
+        if (secretPhase === "TOGGLE") {
+          if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
+            secretToggleCount++;
+            lastSecretGesture = detected;
+            playBeep(400 + secretToggleCount * 100, 'sine', 0.05);
+
+            if (secretTimer) clearTimeout(secretTimer);
+            secretTimer = setTimeout(resetSecretCode, 3000);
+
+            if (secretToggleCount >= 10) { // กำ-แบ ครบ 5 รอบ
+              secretPhase = "WAIT_LOVE";
+              playBeep(880, 'triangle', 0.1);
+            }
+          }
+        } else if (secretPhase === "WAIT_LOVE") {
+          if (detected === "LOVE_3") {
+            playBeep(1200, 'square', 0.3);
+            resetSecretCode();
+            window.location.href = "index.html"; // สลับกลับหน้าหลัก
+          }
+        }
+
+        // Control Globe
+        if (detected === "FIST") {
+          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
+          lastHandX = null; lastHandY = null;
+        } else if (detected === "PALM" && questState === "NONE") {
+          statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก...";
+          if (lastHandX !== null && lastHandY !== null) {
+            globe.rotation.y -= (currentX - lastHandX) * 4; 
+            globe.rotation.x += (currentY - lastHandY) * 4; 
+            globe.rotation.z = 0;
+          }
+          lastHandX = currentX; lastHandY = currentY;
+        } else {
+          lastHandX = null; lastHandY = null;
+        }
+
+        initialHandDistance = null;
+
+        // Combo Quests Logic
+        if (questState === "DO_COMBO" && currentStep < 3) {
+          let currentDetectedId = detected;
+          if (detected === "POINT_1") currentDetectedId = "POINT_UP";
+          if (detected === "PEACE_2") currentDetectedId = "PEACE";
+          if (detected === "LOVE_3") currentDetectedId = "LOVE";
+
+          const targetGesture = currentCombo[currentStep].id;
+          if (currentDetectedId === targetGesture) {
+            holdTimer++;
+            playBeep(500 + holdTimer * 30, 'sine', 0.05);
+
+            if (holdTimer > 15) {
+              playBeep(880, 'square', 0.15);
+              currentStep++; holdTimer = 0; updateComboUI();
+
+              if (currentStep >= 3) {
+                questState = "CLEARED";
+                currentLockedMarker.userData.cleared = true;
+                currentLockedMarker.material.color.setHex(0x00ffcc);
+                currentLockedMarker.userData.ring.material.color.setHex(0x00ffcc);
+                clearedCount++;
+                
+                playBeep(1046, 'sine', 0.4);
+                document.getElementById('score-text').innerText = `สยบภัยพิบัติแล้ว: ${clearedCount} / 5 พื้นที่`;
+                actionBox.innerText = "🎉 ปลดรหัสคาถากู้ภัยสำเร็จ! MISSION CLEAR!";
+                actionBox.style.background = "rgba(0, 255, 204, 0.25)";
+                
+                setTimeout(() => { questCard.style.display = 'none'; questState = "NONE"; }, 3000);
+              }
+            }
+          } else {
+            holdTimer = Math.max(0, holdTimer - 1);
+          }
+        }
+
+      } else if (handsCount === 2) {
+        if (questState === "NONE") {
+          statusText.innerText = "🖐️🖐️ แบ 2 มือ: โหมดซูมเข้า-ออก";
+          const hand1 = results.multiHandLandmarks[0][0];
+          const hand2 = results.multiHandLandmarks[1][0];
+
+          const dist = Math.hypot(hand1.x - hand2.x, hand1.y - hand2.y);
+          if (initialHandDistance !== null) {
+            camera.position.z -= (dist - initialHandDistance) * 6;
+            camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+          }
+          initialHandDistance = dist;
+          lastHandX = null; lastHandY = null;
+        }
+      } else {
+        if (questState === "NONE") {
+          statusText.innerText = "สถานะ: ชูมือขึ้นมาเพื่อเริ่มสำรวจโลก";
+          globe.rotation.y += 0.0015;
+        }
+        lastHandX = null; lastHandY = null; initialHandDistance = null;
+      }
+
+      checkTargetLock();
+    }
+
+    function checkTargetLock() {
+      if (questState === "DO_COMBO" || questState === "CLEARED") return;
+
+      let found = false;
+      if (camera.position.z < 3.2) {
+        markers.forEach(marker => {
+          if (marker.userData.cleared) return;
+          const worldPos = new THREE.Vector3();
+          marker.getWorldPosition(worldPos);
+
+          if (worldPos.z > 1.8) { 
+            found = true;
+            if (currentLockedMarker !== marker) playBeep(784, 'sine', 0.1);
+            currentLockedMarker = marker;
+            
+            if (questState !== "DO_COMBO") {
+              questState = "DO_COMBO";
+              currentStep = 0; holdTimer = 0;
+              currentCombo = generateRandomCombo();
+              
+              document.getElementById('disaster-name').innerText = marker.userData.name;
+              document.getElementById('disaster-coords').innerText = `พิกัด: ${marker.userData.lat}°N, ${marker.userData.lon}°E`;
+              updateComboUI();
+              questCard.style.display = 'block';
+            }
+          }
+        });
+      }
+
+      if (!found && questState === "DO_COMBO") {
+        questCard.style.display = 'none';
+        questState = "NONE";
+        currentLockedMarker = null;
+      }
+    }
+
+    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    new Camera(videoElement, { onFrame: async () => { await hands.send({ image: videoElement }); }, width: 640, height: 480 }).start();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      starField.rotation.y += 0.0005;
+      markers.forEach(m => { if (m.userData.ring) m.userData.ring.rotation.z += 0.02; });
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ศูนย์ปฏิบัติการภูมิสารสนเทศกู้ภัยโลก - Sci-Fi Edition</title>
+  <style>
+    body { margin: 0; overflow: hidden; background-color: #020509; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+    
+    /* กล่องกล้องสแกนมือโฮโลแกรม (ทรงสี่เหลี่ยมผืนผ้า Sci-Fi) */
+    #camera-preview {
+      position: absolute; bottom: 25px; right: 25px;
+      width: 200px; height: 130px;
+      border-radius: 8px;
+      border: 2px solid rgba(0, 255, 204, 0.8); 
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.4), inset 0 0 15px rgba(0, 255, 204, 0.3);
+      overflow: hidden; z-index: 10; background: rgba(2, 5, 9, 0.7);
+    }
+    #webcam { display: none; }
+    #output-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    #hud {
+      position: absolute; top: 25px; left: 25px; color: #00ffcc;
+      font-size: 14px; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
+      pointer-events: none; z-index: 10; font-family: monospace;
+    }
+
+    #layer-indicator {
+      position: absolute; top: 95px; left: 25px;
+      background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc;
+      color: #ffcc00; padding: 6px 12px; border-radius: 4px; font-size: 12px;
+      font-family: monospace; z-index: 10;
+    }
+
+    #svg-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 8;
+    }
+
+    #landmark-card {
+      position: absolute; top: 25px; right: 25px; width: 310px;
+      background: rgba(4, 16, 30, 0.92); border: 1px solid rgba(0, 255, 204, 0.7);
+      backdrop-filter: blur(10px); border-radius: 10px; padding: 14px; color: #fff;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 204, 0.3);
+      display: none; z-index: 10; font-family: monospace;
+    }
+
+    .landmark-img {
+      width: 100%; height: 140px; object-fit: cover; border-radius: 6px;
+      border: 1px solid rgba(0, 255, 204, 0.5); margin-bottom: 8px;
+    }
+
+    #landmark-card h3 { margin: 0 0 4px 0; color: #ffcc00; text-shadow: 0 0 8px rgba(255, 204, 0, 0.6); font-size: 16px; }
+    #landmark-card p { margin: 3px 0; font-size: 12px; color: #b3f0ff; line-height: 1.3; }
+    .badge { display: inline-block; padding: 2px 8px; background: rgba(0, 255, 204, 0.2); border: 1px solid #00ffcc; color: #00ffcc; font-weight: bold; font-size: 10px; border-radius: 3px; margin-bottom: 6px; }
+
+    #manual-switch-btn {
+      position: absolute; bottom: 20px; left: 25px; z-index: 100;
+      background: rgba(0, 20, 40, 0.8); border: 1px solid rgba(0, 255, 204, 0.6);
+      color: #00ffcc; padding: 8px 16px; border-radius: 20px; font-size: 12px;
+      cursor: pointer; font-family: monospace; transition: all 0.3s;
+      box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+    }
+    #manual-switch-btn:hover { background: rgba(0, 255, 204, 0.3); box-shadow: 0 0 15px #00ffcc; }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <div id="hud">
+    <h2 style="margin: 0 0 5px 0; font-size: 20px;">🛰️ GLOBAL GIS COMMAND CENTER</h2>
+    <p id="status" style="margin: 3px 0;">สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม</p>
+  </div>
+
+  <div id="layer-indicator">
+    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว เพื่อสลับสกินโลก)
+  </div>
+
+  <button id="manual-switch-btn" onclick="window.location.href='quest.html'">🔘 quest </button>
+
+  <svg id="svg-overlay">
+    <line id="leader-line" x1="0" y1="0" x2="0" y2="0" stroke="#00ffcc" stroke-width="2" stroke-dasharray="5,5" style="display:none;" />
+    <circle id="leader-dot" cx="0" cy="0" r="5" fill="#ffcc00" style="display:none;" />
+  </svg>
+
+  <div id="landmark-card">
+    <img id="landmark-img" class="landmark-img" src="" alt="Landmark Photo">
+    <span class="badge">TARGET LOCATED</span>
+    <h3 id="landmark-name">ชื่อสถานที่</h3>
+    <p id="landmark-coords">พิกัด: -</p>
+    <hr style="border: 0; border-top: 1px solid rgba(0,255,204,0.3); margin: 6px 0;">
+    <p id="landmark-desc">รายละเอียดเกร็ดความรู้สถานที่...</p>
+  </div>
+
+  <div id="camera-preview">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output-canvas"></canvas>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq = 440, type = 'sine', duration = 0.1) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // Three.js Scene Setup
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    // 🌌 1. Dynamic Starfield Background
+    const starsGeo = new THREE.BufferGeometry();
+    const starsCount = 2000;
+    const starPositions = new Float32Array(starsCount * 3);
+    for(let i=0; i<starsCount*3; i++) {
+      starPositions[i] = (Math.random() - 0.5) * 120;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starsMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 });
+    const starField = new THREE.Points(starsGeo, starsMat);
+    scene.add(starField);
+
+    // 🌍 2. ลูกโลก 3D
+    const globeRadius = 2;
+    const geometry = new THREE.SphereGeometry(globeRadius, 128, 128);
+    const textureLoader = new THREE.TextureLoader();
+
+    const texDay = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
+    const texNight = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg');
+    const texTopo = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
+    const bumpTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
+
+    const material = new THREE.MeshPhongMaterial({ map: texDay, bumpMap: bumpTexture, bumpScale: 0.04, roughness: 0.7, shininess: 15 });
+    const globe = new THREE.Mesh(geometry, material);
+    scene.add(globe);
+
+    const atmosGeo = new THREE.SphereGeometry(globeRadius + 0.08, 64, 64);
+    scene.add(new THREE.Mesh(atmosGeo, new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.15, side: THREE.BackSide })));
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    dirLight.position.set(5, 3, 5);
+    scene.add(dirLight);
+    camera.position.z = 4.5;
+
+    // 📍 3. หมุดแลนด์มาร์กสำคัญ 12 จุด
+    const landmarkPresets = [
+      { name: "กรุงเทพมหานคร (ประเทศไทย)", lat: 13.75, lon: 100.50, img: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=500", desc: "ศูนย์กลางเศรษฐกิจและวัฒนธรรมแห่งลุ่มแม่น้ำเจ้าพระยา" },
+      { name: "มหาพีระมิดแห่งกิซา (อียิปต์)", lat: 29.97, lon: 31.13, img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?w=500", desc: "หนึ่งในเจ็ดสิ่งมหัศจรรย์ของโลกยุคโบราณสิ่งเดียวที่ยังคงเหลืออยู่" },
+      { name: "หอไอเฟล (ฝรั่งเศส)", lat: 48.85, lon: 2.29, img: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=500", desc: "สถาปัตยกรรมโครงสร้างเหล็กแลนด์มาร์กสำคัญระดับโลก ณ กรุงปารีส" },
+      { name: "กำแพงเมืองจีน (จีน)", lat: 40.43, lon: 116.57, img: "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=500", desc: "สิ่งก่อสร้างโบราณที่ยาวที่สุดในโลก ครอบคลุมหลายมณฑลของจีน" },
+      { name: "ยอดเขาเอเวอเรสต์ (เนปาล/จีน)", lat: 27.98, lon: 86.92, img: "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=500", desc: "ยอดเขาที่สูงที่สุดในโลกบนแนวเทือกเขาหิมาลัย" },
+      { name: "รูปปั้นพระเยซูคริสต์ (บราซิล)", lat: -22.95, lon: -43.21, img: "https://images.unsplash.com/photo-1516306580123-e6e52b1b7b5f?w=500", desc: "รูปปั้นขนาดใหญ่ตั้งอยู่บนยอดเขาคอร์โควาโด ณ เมืองริโอเดจาเนโร" },
+      { name: "เทพีเสรีภาพ (สหรัฐอเมริกา)", lat: 40.68, lon: -74.04, img: "https://images.unsplash.com/photo-1605130284535-11dd9eedc58a?w=500", desc: "ประติมากรรมโลหะรมดำขนาดใหญ่ มอบให้โดยชาวฝรั่งเศส" },
+      { name: "ทัชมาฮาล (อินเดีย)", lat: 27.17, lon: 78.04, img: "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=500", desc: "อาคารหินอ่อนสีขาว อนุสรณ์สถานแห่งความรักอันยิ่งใหญ่" },
+      { name: "โคลอสเซียม (อิตาลี)", lat: 41.89, lon: 12.49, img: "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=500", desc: "สนามกีฬากลางแจ้งโบราณขนาดใหญ่ใจกลางกรุงโรม" },
+      { name: "ซิดนีย์โอเปราเฮาส์ (ออสเตรเลีย)", lat: -33.85, lon: 151.21, img: "https://images.unsplash.com/photo-1624138784614-87fd1b6528f8?w=500", desc: "ศูนย์แสดงศิลปะการแสดงรูปทรงเปลือกหอยริมท่าเรือซิดนีย์" },
+      { name: "มาตชูปิกชู (เปรู)", lat: -13.16, lon: -72.54, img: "https://images.unsplash.com/photo-1526392060635-9d6019884377?w=500", desc: "ซากอารยธรรมโบราณของชาวอินคา ตั้งอยู่บนเทือกเขาสูง" },
+      { name: "ภูเขาไฟฟูจิ (ญี่ปุ่น)", lat: 35.36, lon: 138.72, img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=500", desc: "ภูเขาไฟที่สูงที่สุดในญี่ปุ่น สัญลักษณ์ทางวัฒนธรรมอันโดดเด่น" }
+    ];
+
+    function latLonToVector3(lat, lon, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      return new THREE.Vector3(-(radius * Math.sin(phi) * Math.cos(theta)), (radius * Math.cos(phi)), (radius * Math.sin(phi) * Math.sin(theta)));
+    }
+
+    const markers = [];
+    landmarkPresets.forEach(data => {
+      const pos = latLonToVector3(data.lat, data.lon, globeRadius + 0.025);
+      const markerMesh = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+      markerMesh.position.copy(pos);
+      
+      const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.08, 32), new THREE.MeshBasicMaterial({ color: 0xffcc00, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
+      ringMesh.lookAt(pos.clone().multiplyScalar(2));
+      markerMesh.add(ringMesh);
+
+      markerMesh.userData = { ...data, ring: ringMesh };
+      globe.add(markerMesh);
+      markers.push(markerMesh);
+    });
+
+    let lastHandX = null, lastHandY = null, initialHandDistance = null;
+    let currentLockedMarker = null;
+    let currentLayerMode = 1;
+
+    // Secret Code
+    let secretToggleCount = 0, lastSecretGesture = "NONE", secretPhase = "TOGGLE", secretTimer = null;
+
+    const landmarkCard = document.getElementById('landmark-card');
+    const leaderLine = document.getElementById('leader-line');
+    const leaderDot = document.getElementById('leader-dot');
+    const statusText = document.getElementById('status');
+    const layerIndicator = document.getElementById('layer-indicator');
+
+    function detectGesture(landmarks) {
+      const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isFist) return "FIST";
+
+      const isPointUp = landmarks[8].y < landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPointUp) return "POINT_1";
+
+      const isPeace = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
+      if (isPeace) return "PEACE_2";
+
+      const isLove = landmarks[8].y < landmarks[6].y && landmarks[20].y < landmarks[18].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y;
+      if (isLove) return "LOVE_3";
+
+      const isOpenPalm = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y < landmarks[14].y && landmarks[20].y < landmarks[18].y;
+      if (isOpenPalm) return "PALM";
+
+      return "UNKNOWN";
+    }
+
+    function switchSatelliteLayer(mode) {
+      if (currentLayerMode === mode) return;
+      currentLayerMode = mode;
+      playBeep(900, 'square', 0.15);
+
+      if (mode === 1) {
+        material.map = texDay;
+        layerIndicator.innerText = "🗺️ LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
+      } else if (mode === 2) {
+        material.map = texNight;
+        layerIndicator.innerText = "🌃 LAYER: EARTH AT NIGHT (แสงไฟเมืองกลางคืน)";
+      } else if (mode === 3) {
+        material.map = texTopo;
+        layerIndicator.innerText = "🏔️ LAYER: TOPOGRAPHIC HEIGHT (ภูมิประเทศความสูง)";
+      }
+      material.needsUpdate = true;
+    }
+
+    function resetSecretCode() {
+      secretToggleCount = 0; secretPhase = "TOGGLE"; lastSecretGesture = "NONE";
+      if (secretTimer) clearTimeout(secretTimer);
+    }
+
+    // 🖐️ วาดโครงกระดูกมือโฮโลแกรม (สี่เหลี่ยมผืนผ้า)
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],        // นิ้วโป้ง
+      [0,5],[5,6],[6,7],[7,8],        // นิ้วชี้
+      [5,9],[9,10],[10,11],[11,12],   // นิ้วกลาง
+      [9,13],[13,14],[14,15],[15,16], // นิ้วนาง
+      [13,17],[17,18],[18,19],[19,20],[0,17] // นิ้วก้อย & ฝ่ามือ
+    ];
+
+    function drawHologramHand(multiHandLandmarks) {
+      canvasElement.width = videoElement.videoWidth || 320;
+      canvasElement.height = videoElement.videoHeight || 200;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      canvasCtx.globalAlpha = 0.35;
+      canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.globalAlpha = 1.0;
+
+      canvasCtx.fillStyle = 'rgba(0, 255, 204, 0.05)';
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (multiHandLandmarks) {
+        for (const landmarks of multiHandLandmarks) {
+          canvasCtx.strokeStyle = '#00ffcc';
+          canvasCtx.lineWidth = 2.5;
+          canvasCtx.shadowColor = '#00ffcc';
+          canvasCtx.shadowBlur = 8;
+
+          for (const connection of HAND_CONNECTIONS) {
+            const p1 = landmarks[connection[0]];
+            const p2 = landmarks[connection[1]];
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(p1.x * canvasElement.width, p1.y * canvasElement.height);
+            canvasCtx.lineTo(p2.x * canvasElement.width, p2.y * canvasElement.height);
+            canvasCtx.stroke();
+          }
+
+          for (const lm of landmarks) {
+            canvasCtx.fillStyle = '#ff3366';
+            canvasCtx.shadowColor = '#ff3366';
+            canvasCtx.shadowBlur = 6;
+            canvasCtx.beginPath();
+            canvasCtx.arc(lm.x * canvasElement.width, lm.y * canvasElement.height, 3, 0, 2 * Math.PI);
+            canvasCtx.fill();
+          }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function onResults(results) {
+      drawHologramHand(results.multiHandLandmarks);
+
+      const handsCount = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+
+      if (handsCount === 1) {
+        const landmarks = results.multiHandLandmarks[0];
+        const currentX = landmarks[0].x;
+        const currentY = landmarks[0].y;
+        const detected = detectGesture(landmarks);
+
+        if (detected === "POINT_1") switchSatelliteLayer(1);
+        else if (detected === "PEACE_2") switchSatelliteLayer(2);
+        else if (detected === "LOVE_3") switchSatelliteLayer(3);
+
+        if (secretPhase === "TOGGLE") {
+          if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
+            secretToggleCount++; lastSecretGesture = detected;
+            playBeep(400 + secretToggleCount * 100, 'sine', 0.05);
+
+            if (secretTimer) clearTimeout(secretTimer);
+            secretTimer = setTimeout(resetSecretCode, 3000);
+
+            if (secretToggleCount >= 10) {
+              secretPhase = "WAIT_LOVE"; playBeep(880, 'triangle', 0.1);
+            }
+          }
+        } else if (secretPhase === "WAIT_LOVE") {
+          if (detected === "LOVE_3") {
+            playBeep(1200, 'square', 0.3);
+            resetSecretCode();
+            window.location.href = "quest.html";
+          }
+        }
+
+        if (detected === "FIST") {
+          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
+          lastHandX = null; lastHandY = null;
+        } else if (detected === "PALM") {
+          statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก 3D";
+          if (lastHandX !== null && lastHandY !== null) {
+            globe.rotation.y -= (currentX - lastHandX) * 4; 
+            globe.rotation.x += (currentY - lastHandY) * 4; 
+            globe.rotation.z = 0;
+          }
+          lastHandX = currentX; lastHandY = currentY;
+        } else {
+          lastHandX = null; lastHandY = null;
+        }
+
+        initialHandDistance = null;
+
+      } else if (handsCount === 2) {
+        statusText.innerText = "🖐️🖐️ แบ 2 มือ: โหมดซูมเข้า-ออก ส่องแลนด์มาร์ก";
+        const hand1 = results.multiHandLandmarks[0][0];
+        const hand2 = results.multiHandLandmarks[1][0];
+
+        const dist = Math.hypot(hand1.x - hand2.x, hand1.y - hand2.y);
+        if (initialHandDistance !== null) {
+          camera.position.z -= (dist - initialHandDistance) * 6;
+          camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+        }
+        initialHandDistance = dist;
+        lastHandX = null; lastHandY = null;
+
+      } else {
+        statusText.innerText = "สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม";
+        globe.rotation.y += 0.0015;
+        lastHandX = null; lastHandY = null; initialHandDistance = null;
+      }
+
+      checkLandmarkFocus();
+    }
+
+    function checkLandmarkFocus() {
+      let closestMarker = null;
+      let minDistance = Infinity;
+
+      if (camera.position.z < 3.4) {
+        markers.forEach(marker => {
+          const worldPos = new THREE.Vector3();
+          marker.getWorldPosition(worldPos);
+
+          if (worldPos.z > 1.2) {
+            const distToCenter = Math.hypot(worldPos.x, worldPos.y);
+            if (distToCenter < minDistance) {
+              minDistance = distToCenter;
+              closestMarker = marker;
+            }
+          }
+        });
+      }
+
+      if (closestMarker && minDistance < 0.85) {
+        if (currentLockedMarker !== closestMarker) {
+          playBeep(784, 'sine', 0.1);
+          currentLockedMarker = closestMarker;
+          
+          document.getElementById('landmark-img').src = closestMarker.userData.img;
+          document.getElementById('landmark-name').innerText = closestMarker.userData.name;
+          document.getElementById('landmark-coords').innerText = `พิกัด: ${closestMarker.userData.lat}°N, ${closestMarker.userData.lon}°E`;
+          document.getElementById('landmark-desc').innerText = closestMarker.userData.desc;
+          landmarkCard.style.display = 'block';
+        }
+
+        const worldPos = new THREE.Vector3();
+        closestMarker.getWorldPosition(worldPos);
+        
+        const screenPos = worldPos.clone().project(camera);
+        const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
+
+        const cardRect = landmarkCard.getBoundingClientRect();
+        const cardTargetX = cardRect.left;
+        const cardTargetY = cardRect.top + cardRect.height / 2;
+
+        leaderLine.setAttribute('x1', x); leaderLine.setAttribute('y1', y);
+        leaderLine.setAttribute('x2', cardTargetX); leaderLine.setAttribute('y2', cardTargetY);
+        leaderLine.style.display = 'block';
+
+        leaderDot.setAttribute('cx', x); leaderDot.setAttribute('cy', y);
+        leaderDot.style.display = 'block';
+
+      } else {
+        landmarkCard.style.display = 'none';
+        leaderLine.style.display = 'none';
+        leaderDot.style.display = 'none';
+        currentLockedMarker = null;
+      }
+    }
+
+    const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    new Camera(videoElement, { onFrame: async () => { await hands.send({ image: videoElement }); }, width: 640, height: 480 }).start();
+
+    // Loop Animation
+    function animate() {
+      requestAnimationFrame(animate);
+      starField.rotation.y += 0.0005;
+
+      markers.forEach(m => {
+        if (m.userData.ring) {
+          m.userData.ring.rotation.z += 0.02;
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
