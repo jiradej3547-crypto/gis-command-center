@@ -7,7 +7,6 @@
     body { margin: 0; overflow: hidden; background-color: #020509; font-family: 'Segoe UI', Tahoma, sans-serif; }
     #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
     
-    /* กล่องกล้องสแกนมือโฮโลแกรม (ทรงสี่เหลี่ยมผืนผ้า Sci-Fi) */
     #camera-preview {
       position: absolute; bottom: 25px; right: 25px;
       width: 200px; height: 130px;
@@ -76,7 +75,7 @@
   </div>
 
   <div id="layer-indicator">
-    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว สลับสกิน | จีบนิ้วโป้ง-ชี้ เพื่อซูม)
+    🗺️ LAYER: DAY SATELLITE (ชู 2 นิ้วค้าง 1 วิ สลับ กลางวัน ↔ กลางคืน | จีบนิ้วเพื่อซูม)
   </div>
 
   <button id="manual-switch-btn" onclick="window.location.href='quest.html'">🔘 QUEST</button>
@@ -115,7 +114,6 @@
       osc.start(); osc.stop(audioCtx.currentTime + duration);
     }
 
-    // Three.js Scene Setup
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
@@ -125,26 +123,20 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
-    // 🌌 1. Dynamic Starfield Background
     const starsGeo = new THREE.BufferGeometry();
     const starsCount = 2000;
     const starPositions = new Float32Array(starsCount * 3);
-    for(let i=0; i<starsCount*3; i++) {
-      starPositions[i] = (Math.random() - 0.5) * 120;
-    }
+    for(let i=0; i<starsCount*3; i++) starPositions[i] = (Math.random() - 0.5) * 120;
     starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starsMat = new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 });
-    const starField = new THREE.Points(starsGeo, starsMat);
+    const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 }));
     scene.add(starField);
 
-    // 🌍 2. ลูกโลก 3D
     const globeRadius = 2;
     const geometry = new THREE.SphereGeometry(globeRadius, 128, 128);
     const textureLoader = new THREE.TextureLoader();
 
     const texDay = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
     const texNight = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg');
-    const texTopo = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
     const bumpTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
 
     const material = new THREE.MeshPhongMaterial({ map: texDay, bumpMap: bumpTexture, bumpScale: 0.04, roughness: 0.7, shininess: 15 });
@@ -160,7 +152,6 @@
     scene.add(dirLight);
     camera.position.z = 4.5;
 
-    // 📍 3. หมุดแลนด์มาร์กสำคัญ 12 จุด
     const landmarkPresets = [
       { name: "กรุงเทพมหานคร (ประเทศไทย)", lat: 13.75, lon: 100.50, img: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=500", desc: "ศูนย์กลางเศรษฐกิจและวัฒนธรรมแห่งลุ่มแม่น้ำเจ้าพระยา" },
       { name: "มหาพีระมิดแห่งกิซา (อียิปต์)", lat: 29.97, lon: 31.13, img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?w=500", desc: "หนึ่งในเจ็ดสิ่งมหัศจรรย์ของโลกยุคโบราณสิ่งเดียวที่ยังคงเหลืออยู่" },
@@ -199,10 +190,13 @@
 
     let lastHandX = null, lastHandY = null, initialHandDistance = null, initialPinchDistance = null;
     let currentLockedMarker = null;
-    let currentLayerMode = 1;
+    let isNightMode = false; // สลับแค่ 2 โหมด: false = กลางวัน, true = กลางคืน
 
-    // Secret Code
     let secretToggleCount = 0, lastSecretGesture = "NONE", secretPhase = "TOGGLE", secretTimer = null;
+
+    // หน่วงเวลาสลับแค่ 1 วินาที (20 เฟรม)
+    let holdPeaceFrames = 0;
+    const HOLD_REQUIRED_FRAMES = 20; // ~1 วินาที
 
     const landmarkCard = document.getElementById('landmark-card');
     const leaderLine = document.getElementById('leader-line');
@@ -213,9 +207,6 @@
     function detectGesture(landmarks) {
       const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
       if (isFist) return "FIST";
-
-      const isPointUp = landmarks[8].y < landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
-      if (isPointUp) return "POINT_1";
 
       const isPeace = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
       if (isPeace) return "PEACE_2";
@@ -229,20 +220,16 @@
       return "UNKNOWN";
     }
 
-    function switchSatelliteLayer(mode) {
-      if (currentLayerMode === mode) return;
-      currentLayerMode = mode;
-      playBeep(900, 'square', 0.15);
+    function toggleSatelliteLayer() {
+      isNightMode = !isNightMode;
+      playBeep(900, 'square', 0.2);
 
-      if (mode === 1) {
-        material.map = texDay;
-        layerIndicator.innerText = "🗺️ LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
-      } else if (mode === 2) {
+      if (isNightMode) {
         material.map = texNight;
         layerIndicator.innerText = "🌃 LAYER: EARTH AT NIGHT (แสงไฟเมืองกลางคืน)";
-      } else if (mode === 3) {
-        material.map = texTopo;
-        layerIndicator.innerText = "🏔️ LAYER: TOPOGRAPHIC HEIGHT (ภูมิประเทศความสูง)";
+      } else {
+        material.map = texDay;
+        layerIndicator.innerText = "🗺️ LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
       }
       material.needsUpdate = true;
     }
@@ -252,17 +239,16 @@
       if (secretTimer) clearTimeout(secretTimer);
     }
 
-    // 🖐️ วาดโครงกระดูกมือโฮโลแกรม (สี่เหลี่ยมผืนผ้า)
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('output-canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
     const HAND_CONNECTIONS = [
-      [0,1],[1,2],[2,3],[3,4],        // นิ้วโป้ง
-      [0,5],[5,6],[6,7],[7,8],        // นิ้วชี้
-      [5,9],[9,10],[10,11],[11,12],   // นิ้วกลาง
-      [9,13],[13,14],[14,15],[15,16], // นิ้วนาง
-      [13,17],[17,18],[18,19],[19,20],[0,17] // นิ้วก้อย & ฝ่ามือ
+      [0,1],[1,2],[2,3],[3,4],        
+      [0,5],[5,6],[6,7],[7,8],        
+      [5,9],[9,10],[10,11],[11,12],   
+      [9,13],[13,14],[14,15],[15,16], 
+      [13,17],[17,18],[18,19],[19,20],[0,17] 
     ];
 
     function drawHologramHand(multiHandLandmarks) {
@@ -319,21 +305,30 @@
         const currentY = landmarks[0].y;
         const detected = detectGesture(landmarks);
 
-        // 🤏 คำนวณระยะห่างระหว่างนิ้วโป้ง (4) กับนิ้วชี้ (8)
         const thumbTip = landmarks[4];
         const indexTip = landmarks[8];
         const pinchDistance = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
 
-        // ตรวจจับว่านิ้วโป้งกับนิ้วชี้อยู่ในโหมดจีบหรือไม่ (นิ้วกลาง, นาง, ก้อย พับเก็บ)
         const isMiddleFolded = landmarks[12].y > landmarks[10].y;
         const isRingFolded = landmarks[16].y > landmarks[14].y;
         const isPinkyFolded = landmarks[20].y > landmarks[18].y;
         const isPinchGesture = isMiddleFolded && isRingFolded && isPinkyFolded;
 
-        if (detected === "POINT_1") switchSatelliteLayer(1);
-        else if (detected === "PEACE_2") switchSatelliteLayer(2);
-        else if (detected === "LOVE_3") switchSatelliteLayer(3);
+        // ✌️ ชู 2 นิ้ว ค้างไว้เพียง 1 วินาที เพื่อสลับโหมด กลางวัน ↔ กลางคืน
+        if (detected === "PEACE_2" && secretPhase !== "WAIT_LOVE") {
+          holdPeaceFrames++;
+          const pct = Math.min(100, Math.round((holdPeaceFrames / HOLD_REQUIRED_FRAMES) * 100));
+          statusText.innerText = `⏳ กำลังสลับโหมดแผนที่... (${pct}%)`;
 
+          if (holdPeaceFrames >= HOLD_REQUIRED_FRAMES) {
+            toggleSatelliteLayer();
+            holdPeaceFrames = 0;
+          }
+        } else {
+          holdPeaceFrames = 0;
+        }
+
+        // Secret Code
         if (secretPhase === "TOGGLE") {
           if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
             secretToggleCount++; lastSecretGesture = detected;
@@ -354,20 +349,29 @@
           }
         }
 
-        // 🤏 ถ้าเข้าข่ายท่าจีบนิ้วโป้ง-ชี้ = โหมดซูมด้วยมือเดียว
+        // 🤏 ระบบซูมจีบนิ้ว
         if (isPinchGesture) {
-          statusText.innerText = "🤏 จีบนิ้วโป้ง-ชี้: ย่อ/ขยาย ซูมลูกโลก";
+          statusText.innerText = "🤏 จีบนิ้วโป้ง-ชี้: ซูมลื่นไหล (Smooth Pinch Zoom)";
+
           if (initialPinchDistance !== null) {
-            const zoomDelta = (pinchDistance - initialPinchDistance) * 8;
-            camera.position.z -= zoomDelta;
-            camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+            const delta = pinchDistance - initialPinchDistance;
+
+            if (Math.abs(delta) > 0.015) {
+              const zoomDelta = delta * 2.5;
+              camera.position.z -= zoomDelta;
+              camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+              initialPinchDistance = initialPinchDistance + delta * 0.3;
+            }
+          } else {
+            initialPinchDistance = pinchDistance;
           }
-          initialPinchDistance = pinchDistance;
+
           lastHandX = null; lastHandY = null;
+
         } else if (detected === "FIST") {
           statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
           lastHandX = null; lastHandY = null; initialPinchDistance = null;
-        } else if (detected === "PALM") {
+        } else if (detected === "PALM" && holdPeaceFrames === 0) {
           statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก 3D";
           if (lastHandX !== null && lastHandY !== null) {
             globe.rotation.y -= (currentX - lastHandX) * 4; 
@@ -375,7 +379,7 @@
             globe.rotation.z = 0;
           }
           lastHandX = currentX; lastHandY = currentY; initialPinchDistance = null;
-        } else {
+        } else if (detected !== "PEACE_2") {
           lastHandX = null; lastHandY = null; initialPinchDistance = null;
         }
 
@@ -393,11 +397,13 @@
         }
         initialHandDistance = dist;
         lastHandX = null; lastHandY = null; initialPinchDistance = null;
+        holdPeaceFrames = 0;
 
       } else {
         statusText.innerText = "สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม";
         globe.rotation.y += 0.0015;
         lastHandX = null; lastHandY = null; initialHandDistance = null; initialPinchDistance = null;
+        holdPeaceFrames = 0;
       }
 
       checkLandmarkFocus();
@@ -466,7 +472,6 @@
 
     new Camera(videoElement, { onFrame: async () => { await hands.send({ image: videoElement }); }, width: 640, height: 480 }).start();
 
-    // Loop Animation
     function animate() {
       requestAnimationFrame(animate);
       starField.rotation.y += 0.0005;
