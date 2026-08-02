@@ -18,19 +18,6 @@
     #webcam { display: none; }
     #output-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
-    #hud {
-      position: absolute; top: 25px; left: 25px; color: #00ffcc;
-      font-size: 14px; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
-      pointer-events: none; z-index: 10; font-family: monospace;
-    }
-
-    #layer-indicator {
-      position: absolute; top: 95px; left: 25px;
-      background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc;
-      color: #ffcc00; padding: 6px 12px; border-radius: 4px; font-size: 12px;
-      font-family: monospace; z-index: 10;
-    }
-
     #svg-overlay {
       position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
       pointer-events: none; z-index: 8;
@@ -68,15 +55,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
-
-  <div id="hud">
-    <h2 style="margin: 0 0 5px 0; font-size: 20px;">🛰️ GLOBAL GIS COMMAND CENTER</h2>
-    <p id="status" style="margin: 3px 0;">สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม</p>
-  </div>
-
-  <div id="layer-indicator">
-    🗺️ LAYER: DAY SATELLITE (ชู 2 นิ้วค้าง 1 วิ สลับ กลางวัน ↔ กลางคืน | จีบนิ้วเพื่อซูม)
-  </div>
 
   <button id="manual-switch-btn" onclick="window.location.href='quest.html'">🔘 QUEST</button>
 
@@ -123,40 +101,66 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
+    // 🌌 1. Dynamic Starfield Background
     const starsGeo = new THREE.BufferGeometry();
-    const starsCount = 2000;
+    const starsCount = 2500;
     const starPositions = new Float32Array(starsCount * 3);
     for(let i=0; i<starsCount*3; i++) starPositions[i] = (Math.random() - 0.5) * 120;
     starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
     const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0x00aaff, size: 0.15, transparent: true, opacity: 0.85 }));
     scene.add(starField);
 
+    // 🌍 2. ลูกโลก 3D & ดวงจันทร์ HD
     const globeRadius = 2;
-    const geometry = new THREE.SphereGeometry(globeRadius, 128, 128);
+    const geometry = new THREE.SphereGeometry(globeRadius, 256, 256);
     const textureLoader = new THREE.TextureLoader();
 
-    const texDay = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
-    const texNight = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg');
-    const bumpTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
+    function setupHDTexture(texture) {
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+      texture.anisotropy = maxAnisotropy;
+      return texture;
+    }
 
-    const material = new THREE.MeshPhongMaterial({ map: texDay, bumpMap: bumpTexture, bumpScale: 0.04, roughness: 0.7, shininess: 15 });
+    const texDay = setupHDTexture(textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'));
+    const texNight = setupHDTexture(textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'));
+    const bumpTexture = setupHDTexture(textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png'));
+    
+    // Texture ดวงจันทร์ HD คมชัด ลึกสมจริง
+    const texMoonHD = setupHDTexture(textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'));
+
+    // ใช้ PhongMaterial ปรับความสว่างให้สมดุล
+    const material = new THREE.MeshPhongMaterial({ 
+      map: texDay, 
+      bumpMap: bumpTexture, 
+      bumpScale: 0.04, 
+      shininess: 8 
+    });
     const globe = new THREE.Mesh(geometry, material);
     scene.add(globe);
 
     const atmosGeo = new THREE.SphereGeometry(globeRadius + 0.08, 64, 64);
-    scene.add(new THREE.Mesh(atmosGeo, new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.15, side: THREE.BackSide })));
+    const atmosphereMesh = new THREE.Mesh(atmosGeo, new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.15, side: THREE.BackSide }));
+    scene.add(atmosphereMesh);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
-    dirLight.position.set(5, 3, 5);
+    // ปรับระบบแสงสมดุล คุมไม่ให้ดวงจันทร์สว่างจ้าเกินไป
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+    scene.add(ambientLight);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(6, 3, 5);
     scene.add(dirLight);
+
     camera.position.z = 4.5;
 
+    // 📍 3. หมุดแลนด์มาร์กสำคัญ 12 จุด
     const landmarkPresets = [
       { name: "กรุงเทพมหานคร (ประเทศไทย)", lat: 13.75, lon: 100.50, img: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=500", desc: "ศูนย์กลางเศรษฐกิจและวัฒนธรรมแห่งลุ่มแม่น้ำเจ้าพระยา" },
       { name: "มหาพีระมิดแห่งกิซา (อียิปต์)", lat: 29.97, lon: 31.13, img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?w=500", desc: "หนึ่งในเจ็ดสิ่งมหัศจรรย์ของโลกยุคโบราณสิ่งเดียวที่ยังคงเหลืออยู่" },
       { name: "หอไอเฟล (ฝรั่งเศส)", lat: 48.85, lon: 2.29, img: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=500", desc: "สถาปัตยกรรมโครงสร้างเหล็กแลนด์มาร์กสำคัญระดับโลก ณ กรุงปารีส" },
-      { name: "กำแพงเมืองจีน (จีน)", lat: 40.43, lon: 116.57, img: "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=500", desc: "สิ่งก่อสร้างโบราณที่ยาวที่สุดในโลก ครอบคลุมหลายมณฑลของจีน" },
+      { name: "กำแพงเมืองจีน (จีน)", lat: 40.43, lon: 116.57, img: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=500", desc: "สิ่งก่อสร้างโบราณที่ยาวที่สุดในโลก ครอบคลุมหลายมณฑลของจีน" },
       { name: "ยอดเขาเอเวอเรสต์ (เนปาล/จีน)", lat: 27.98, lon: 86.92, img: "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=500", desc: "ยอดเขาที่สูงที่สุดในโลกบนแนวเทือกเขาหิมาลัย" },
       { name: "รูปปั้นพระเยซูคริสต์ (บราซิล)", lat: -22.95, lon: -43.21, img: "https://images.unsplash.com/photo-1516306580123-e6e52b1b7b5f?w=500", desc: "รูปปั้นขนาดใหญ่ตั้งอยู่บนยอดเขาคอร์โควาโด ณ เมืองริโอเดจาเนโร" },
       { name: "เทพีเสรีภาพ (สหรัฐอเมริกา)", lat: 40.68, lon: -74.04, img: "https://images.unsplash.com/photo-1605130284535-11dd9eedc58a?w=500", desc: "ประติมากรรมโลหะรมดำขนาดใหญ่ มอบให้โดยชาวฝรั่งเศส" },
@@ -190,19 +194,22 @@
 
     let lastHandX = null, lastHandY = null, initialHandDistance = null, initialPinchDistance = null;
     let currentLockedMarker = null;
-    let isNightMode = false; // สลับแค่ 2 โหมด: false = กลางวัน, true = กลางคืน
+    let isNightMode = false;
+    let isMoonMode = false;
+    let isHidePinsMode = false; // โหมดโลกไร้หมุดหมุนเร็ว 3 เท่า
 
     let secretToggleCount = 0, lastSecretGesture = "NONE", secretPhase = "TOGGLE", secretTimer = null;
-
-    // หน่วงเวลาสลับแค่ 1 วินาที (20 เฟรม)
     let holdPeaceFrames = 0;
-    const HOLD_REQUIRED_FRAMES = 20; // ~1 วินาที
+    let holdMoonFrames = 0;
+    let holdDoublePeaceFrames = 0;
+    
+    const HOLD_PEACE_FRAMES = 20; 
+    const HOLD_MOON_FRAMES = 30; // ~1.5 วินาที สลับดวงจันทร์
+    const HOLD_DOUBLE_PEACE_FRAMES = 20; // ~1 วินาที สลับโหมดไร้หมุด
 
     const landmarkCard = document.getElementById('landmark-card');
     const leaderLine = document.getElementById('leader-line');
     const leaderDot = document.getElementById('leader-dot');
-    const statusText = document.getElementById('status');
-    const layerIndicator = document.getElementById('layer-indicator');
 
     function detectGesture(landmarks) {
       const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y && landmarks[16].y > landmarks[14].y && landmarks[20].y > landmarks[18].y;
@@ -221,17 +228,48 @@
     }
 
     function toggleSatelliteLayer() {
+      if (isMoonMode) return;
       isNightMode = !isNightMode;
       playBeep(900, 'square', 0.2);
 
-      if (isNightMode) {
-        material.map = texNight;
-        layerIndicator.innerText = "🌃 LAYER: EARTH AT NIGHT (แสงไฟเมืองกลางคืน)";
+      material.map = isNightMode ? texNight : texDay;
+      material.bumpMap = bumpTexture;
+      material.bumpScale = 0.04;
+      material.needsUpdate = true;
+    }
+
+    // 🌕 สลับโหมดดวงจันทร์ HD ปรับแสงนุ่มนวล
+    function toggleMoonMode() {
+      isMoonMode = !isMoonMode;
+      playBeep(1200, 'triangle', 0.4);
+
+      if (isMoonMode) {
+        material.map = texMoonHD;
+        material.bumpMap = texMoonHD;
+        material.bumpScale = 0.06;
+        ambientLight.intensity = 0.45; // ลด Ambient เพื่อไม่ให้ดวงจันทร์จ้าเกินไป
+        dirLight.intensity = 1.2;
+        atmosphereMesh.visible = false; 
+        markers.forEach(m => m.visible = false); 
       } else {
-        material.map = texDay;
-        layerIndicator.innerText = "🗺️ LAYER: DAY SATELLITE (ดาวเทียมกลางวัน)";
+        material.map = isNightMode ? texNight : texDay;
+        material.bumpMap = bumpTexture;
+        material.bumpScale = 0.04;
+        ambientLight.intensity = 0.7;
+        dirLight.intensity = 1.0;
+        atmosphereMesh.visible = !isHidePinsMode;
+        markers.forEach(m => m.visible = !isHidePinsMode);
       }
       material.needsUpdate = true;
+    }
+
+    // ✌️✌️ สลับโหมดโลกไร้หมุด (Show Mode)
+    function toggleHidePinsMode() {
+      if (isMoonMode) return;
+      isHidePinsMode = !isHidePinsMode;
+      playBeep(1100, 'sine', 0.25);
+
+      markers.forEach(m => m.visible = !isHidePinsMode);
     }
 
     function resetSecretCode() {
@@ -314,13 +352,9 @@
         const isPinkyFolded = landmarks[20].y > landmarks[18].y;
         const isPinchGesture = isMiddleFolded && isRingFolded && isPinkyFolded;
 
-        // ✌️ ชู 2 นิ้ว ค้างไว้เพียง 1 วินาที เพื่อสลับโหมด กลางวัน ↔ กลางคืน
         if (detected === "PEACE_2" && secretPhase !== "WAIT_LOVE") {
           holdPeaceFrames++;
-          const pct = Math.min(100, Math.round((holdPeaceFrames / HOLD_REQUIRED_FRAMES) * 100));
-          statusText.innerText = `⏳ กำลังสลับโหมดแผนที่... (${pct}%)`;
-
-          if (holdPeaceFrames >= HOLD_REQUIRED_FRAMES) {
+          if (holdPeaceFrames >= HOLD_PEACE_FRAMES) {
             toggleSatelliteLayer();
             holdPeaceFrames = 0;
           }
@@ -328,7 +362,6 @@
           holdPeaceFrames = 0;
         }
 
-        // Secret Code
         if (secretPhase === "TOGGLE") {
           if ((detected === "FIST" || detected === "PALM") && detected !== lastSecretGesture) {
             secretToggleCount++; lastSecretGesture = detected;
@@ -349,30 +382,23 @@
           }
         }
 
-        // 🤏 ระบบซูมจีบนิ้ว
         if (isPinchGesture) {
-          statusText.innerText = "🤏 จีบนิ้วโป้ง-ชี้: ซูมลื่นไหล (Smooth Pinch Zoom)";
-
           if (initialPinchDistance !== null) {
             const delta = pinchDistance - initialPinchDistance;
-
             if (Math.abs(delta) > 0.015) {
               const zoomDelta = delta * 2.5;
               camera.position.z -= zoomDelta;
-              camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+              camera.position.z = Math.max(2.05, Math.min(12.0, camera.position.z));
               initialPinchDistance = initialPinchDistance + delta * 0.3;
             }
           } else {
             initialPinchDistance = pinchDistance;
           }
-
           lastHandX = null; lastHandY = null;
 
         } else if (detected === "FIST") {
-          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
           lastHandX = null; lastHandY = null; initialPinchDistance = null;
         } else if (detected === "PALM" && holdPeaceFrames === 0) {
-          statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก 3D";
           if (lastHandX !== null && lastHandY !== null) {
             globe.rotation.y -= (currentX - lastHandX) * 4; 
             globe.rotation.x += (currentY - lastHandY) * 4; 
@@ -384,32 +410,72 @@
         }
 
         initialHandDistance = null;
+        holdMoonFrames = 0;
+        holdDoublePeaceFrames = 0;
 
       } else if (handsCount === 2) {
-        statusText.innerText = "🖐️🖐️ แบ 2 มือ: โหมดซูมเข้า-ออก ส่องแลนด์มาร์ก";
-        const hand1 = results.multiHandLandmarks[0][0];
-        const hand2 = results.multiHandLandmarks[1][0];
+        const hand1Gest = detectGesture(results.multiHandLandmarks[0]);
+        const hand2Gest = detectGesture(results.multiHandLandmarks[1]);
 
-        const dist = Math.hypot(hand1.x - hand2.x, hand1.y - hand2.y);
-        if (initialHandDistance !== null) {
-          camera.position.z -= (dist - initialHandDistance) * 6;
-          camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+        // 🤟🤟 ชูเลิฟ 2 ข้างค้างไว้ 1.5 วิ สลับโหมดดวงจันทร์ HD
+        if (hand1Gest === "LOVE_3" && hand2Gest === "LOVE_3") {
+          holdMoonFrames++;
+          playBeep(600 + holdMoonFrames * 12, 'sine', 0.02);
+
+          if (holdMoonFrames >= HOLD_MOON_FRAMES) {
+            toggleMoonMode();
+            holdMoonFrames = 0;
+          }
+          holdDoublePeaceFrames = 0;
+
+        // ✌️✌️ ชู 2 นิ้วพร้อมกัน 2 ข้างค้างไว้ 1 วิ เปิด/ปิดโหมดโลกไร้หมุด (หมุนเร็ว 3 เท่า)
+        } else if (hand1Gest === "PEACE_2" && hand2Gest === "PEACE_2") {
+          holdDoublePeaceFrames++;
+          playBeep(800 + holdDoublePeaceFrames * 10, 'sine', 0.02);
+
+          if (holdDoublePeaceFrames >= HOLD_DOUBLE_PEACE_FRAMES) {
+            toggleHidePinsMode();
+            holdDoublePeaceFrames = 0;
+          }
+          holdMoonFrames = 0;
+
+        } else {
+          holdMoonFrames = 0;
+          holdDoublePeaceFrames = 0;
+
+          const hand1 = results.multiHandLandmarks[0][0];
+          const hand2 = results.multiHandLandmarks[1][0];
+
+          const dist = Math.hypot(hand1.x - hand2.x, hand1.y - hand2.y);
+          if (initialHandDistance !== null) {
+            camera.position.z -= (dist - initialHandDistance) * 6;
+            camera.position.z = Math.max(2.05, Math.min(12.0, camera.position.z));
+          }
+          initialHandDistance = dist;
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
+          holdPeaceFrames = 0;
         }
-        initialHandDistance = dist;
-        lastHandX = null; lastHandY = null; initialPinchDistance = null;
-        holdPeaceFrames = 0;
 
       } else {
-        statusText.innerText = "สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม";
-        globe.rotation.y += 0.0015;
+        // ในโหมดไร้หมุด (isHidePinsMode) หมุนเร็วขึ้นเป็น 3 เท่า (0.0045) เพื่อปล่อยหน้าจอเรียกลูกค้า
+        const rotSpeed = isHidePinsMode ? 0.0045 : 0.0015;
+        globe.rotation.y += rotSpeed;
+
         lastHandX = null; lastHandY = null; initialHandDistance = null; initialPinchDistance = null;
-        holdPeaceFrames = 0;
+        holdPeaceFrames = 0; holdMoonFrames = 0; holdDoublePeaceFrames = 0;
       }
 
       checkLandmarkFocus();
     }
 
     function checkLandmarkFocus() {
+      if (isMoonMode || isHidePinsMode) {
+        landmarkCard.style.display = 'none';
+        leaderLine.style.display = 'none';
+        leaderDot.style.display = 'none';
+        return;
+      }
+
       let closestMarker = null;
       let minDistance = Infinity;
 
