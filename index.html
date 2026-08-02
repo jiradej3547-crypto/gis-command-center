@@ -76,10 +76,10 @@
   </div>
 
   <div id="layer-indicator">
-    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว เพื่อสลับสกินโลก)
+    🗺️ LAYER: DAY SATELLITE (ชู 1/2/3 นิ้ว สลับสกิน | จีบนิ้วโป้ง-ชี้ เพื่อซูม)
   </div>
 
-  <button id="manual-switch-btn" onclick="window.location.href='quest.html'">🔘 quest </button>
+  <button id="manual-switch-btn" onclick="window.location.href='quest.html'">🔘 QUEST</button>
 
   <svg id="svg-overlay">
     <line id="leader-line" x1="0" y1="0" x2="0" y2="0" stroke="#00ffcc" stroke-width="2" stroke-dasharray="5,5" style="display:none;" />
@@ -197,7 +197,7 @@
       markers.push(markerMesh);
     });
 
-    let lastHandX = null, lastHandY = null, initialHandDistance = null;
+    let lastHandX = null, lastHandY = null, initialHandDistance = null, initialPinchDistance = null;
     let currentLockedMarker = null;
     let currentLayerMode = 1;
 
@@ -319,6 +319,17 @@
         const currentY = landmarks[0].y;
         const detected = detectGesture(landmarks);
 
+        // 🤏 คำนวณระยะห่างระหว่างนิ้วโป้ง (4) กับนิ้วชี้ (8)
+        const thumbTip = landmarks[4];
+        const indexTip = landmarks[8];
+        const pinchDistance = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+
+        // ตรวจจับว่านิ้วโป้งกับนิ้วชี้อยู่ในโหมดจีบหรือไม่ (นิ้วกลาง, นาง, ก้อย พับเก็บ)
+        const isMiddleFolded = landmarks[12].y > landmarks[10].y;
+        const isRingFolded = landmarks[16].y > landmarks[14].y;
+        const isPinkyFolded = landmarks[20].y > landmarks[18].y;
+        const isPinchGesture = isMiddleFolded && isRingFolded && isPinkyFolded;
+
         if (detected === "POINT_1") switchSatelliteLayer(1);
         else if (detected === "PEACE_2") switchSatelliteLayer(2);
         else if (detected === "LOVE_3") switchSatelliteLayer(3);
@@ -343,9 +354,19 @@
           }
         }
 
-        if (detected === "FIST") {
-          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
+        // 🤏 ถ้าเข้าข่ายท่าจีบนิ้วโป้ง-ชี้ = โหมดซูมด้วยมือเดียว
+        if (isPinchGesture) {
+          statusText.innerText = "🤏 จีบนิ้วโป้ง-ชี้: ย่อ/ขยาย ซูมลูกโลก";
+          if (initialPinchDistance !== null) {
+            const zoomDelta = (pinchDistance - initialPinchDistance) * 8;
+            camera.position.z -= zoomDelta;
+            camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
+          }
+          initialPinchDistance = pinchDistance;
           lastHandX = null; lastHandY = null;
+        } else if (detected === "FIST") {
+          statusText.innerText = "✊ กำมือ: ปลดเกียร์ว่าง (พักการหมุน)";
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
         } else if (detected === "PALM") {
           statusText.innerText = "🖐️ แบมือ: กำลังหมุนสำรวจโลก 3D";
           if (lastHandX !== null && lastHandY !== null) {
@@ -353,9 +374,9 @@
             globe.rotation.x += (currentY - lastHandY) * 4; 
             globe.rotation.z = 0;
           }
-          lastHandX = currentX; lastHandY = currentY;
+          lastHandX = currentX; lastHandY = currentY; initialPinchDistance = null;
         } else {
-          lastHandX = null; lastHandY = null;
+          lastHandX = null; lastHandY = null; initialPinchDistance = null;
         }
 
         initialHandDistance = null;
@@ -371,12 +392,12 @@
           camera.position.z = Math.max(2.05, Math.min(8.0, camera.position.z));
         }
         initialHandDistance = dist;
-        lastHandX = null; lastHandY = null;
+        lastHandX = null; lastHandY = null; initialPinchDistance = null;
 
       } else {
         statusText.innerText = "สถานะ: ระบบพร้อมทำงาน - ชูมือเพื่อควบคุม";
         globe.rotation.y += 0.0015;
-        lastHandX = null; lastHandY = null; initialHandDistance = null;
+        lastHandX = null; lastHandY = null; initialHandDistance = null; initialPinchDistance = null;
       }
 
       checkLandmarkFocus();
